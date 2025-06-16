@@ -74,7 +74,7 @@ const BotGroupsPage: React.FC<BotGroupsPageProps> = ({ bot, onBack }) => {
             {groups.map((group) => (
               <li
                 key={group.GroupId}
-                className="flex w-full cursor-pointer items-center gap-2 rounded bg-sky-50 p-2 shadow hover:bg-sky-100 dark:hover:bg-emerald-900/30"
+                className="flex w-full cursor-pointer items-center gap-2 rounded bg-sky-50 p-2 shadow hover:bg-sky-100 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-emerald-900/60"
                 onClick={() => toggleSelect(group.GroupId)}
               >
                 <input

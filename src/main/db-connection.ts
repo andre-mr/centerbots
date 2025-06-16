@@ -9,45 +9,45 @@ fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 sqlite3.verbose();
 
 const schema = `
--- Configuração geral da aplicação
+-- General application configuration
 CREATE TABLE IF NOT EXISTS app_config (
-    id                  INTEGER PRIMARY KEY CHECK (id = 1), -- garante somente uma linha
+    id                  INTEGER PRIMARY KEY CHECK (id = 1), -- ensures only one row
     api_key             TEXT,
     auth_token          TEXT,
     dark_mode           INTEGER NOT NULL DEFAULT 0,       -- 0 = false, 1 = true
-    user_info           TEXT,                             -- JSON ou string livre
+    user_info           TEXT,                             -- JSON or free string
     plan_status         TEXT    NOT NULL,                 -- PlanStatus: 'Valid', 'Grace', 'Invalid'
     plan_tier           TEXT    NOT NULL,                 -- PlanTier: 'Basic', 'Full'
-    last_checked        TEXT    NOT NULL                  -- ISO datetime da última verificação
+    last_checked        TEXT    NOT NULL                  -- ISO datetime of last check
 );
 
--- Bots WhatsApp
+-- WhatsApp Bots
 CREATE TABLE IF NOT EXISTS bots (
     id                      INTEGER PRIMARY KEY AUTOINCREMENT,
-    wa_number               TEXT,                         -- número da conta (ex: '553499991111')
-    campaign                TEXT    NOT Null,             -- nome da campanha (ex: 'Promobot')
+    wa_number               TEXT,                         -- account number (e.g.: '553499991111')
+    campaign                TEXT    NOT Null,             -- campaign name (e.g.: 'Promobot')
     whatsapp_sources        TEXT    NOT NULL,             -- WhatsAppSources: 'All', 'Direct', 'Group'
     send_method             TEXT    NOT NULL,             -- SendMethods: 'Text', 'Image', 'Forward'
-    delay_between_groups    INTEGER NOT NULL DEFAULT 2,   -- em segundos
-    delay_between_messages  INTEGER NOT NULL DEFAULT 10,  -- em segundos
-    link_tracking_domains   TEXT,                         -- JSON array de domínios
+    delay_between_groups    INTEGER NOT NULL DEFAULT 2,   -- in seconds
+    delay_between_messages  INTEGER NOT NULL DEFAULT 10,  -- in seconds
+    link_parameters         TEXT    NOT NULL,             -- Link parameters (LinkParameters: 'all', 'source', 'medium', 'none')
     updated                 TEXT    NOT NULL              -- ISO datetime
 );
 
--- Grupos
+-- Groups
 CREATE TABLE IF NOT EXISTS groups (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    group_jid   TEXT    NOT NULL UNIQUE,    -- ID do grupo no WhatsApp
+    group_jid   TEXT    NOT NULL UNIQUE,    -- WhatsApp group ID
     name        TEXT
 );
 
--- Membros (contas WhatsApp)
+-- Members (WhatsApp accounts)
 CREATE TABLE IF NOT EXISTS members (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     member_jid  TEXT NOT NULL UNIQUE
 );
 
--- Associação membros ↔ grupos (N:N)
+-- Member ↔ group association (N:N)
 CREATE TABLE IF NOT EXISTS group_members (
     group_id   INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
     member_id  INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
@@ -55,24 +55,24 @@ CREATE TABLE IF NOT EXISTS group_members (
     PRIMARY KEY (group_id, member_id)
 );
 
--- Mensagens (enfileiradas ou enviadas)
+-- Messages (queued or sent)
 CREATE TABLE IF NOT EXISTS messages (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    content         TEXT,                    -- texto da mensagem
-    timestamp       TEXT  NOT NULL,          -- ISO datetime do envio
-    original_jid    TEXT,                    -- id whatsapp da mensagem recebida
-    sender_jid      TEXT,                    -- número de quem enviou
-    image           BLOB                     -- imagem da mensagem
+    content         TEXT,                    -- message text
+    timestamp       TEXT  NOT NULL,          -- ISO datetime of sending
+    original_jid    TEXT,                    -- WhatsApp ID of the received message
+    sender_jid      TEXT,                    -- sender's number
+    image           BLOB                     -- message image
 );
 
--- Números autorizados por bot (N:N)
+-- Authorized numbers per bot (N:N)
 CREATE TABLE IF NOT EXISTS authorized_numbers (
     bot_id     INTEGER NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
     wa_number  TEXT    NOT NULL,
     PRIMARY KEY (bot_id, wa_number)
 );
 
--- Associação bots ↔ grupos (N:N)
+-- Bot ↔ group association (N:N)
 CREATE TABLE IF NOT EXISTS bot_groups (
     bot_id     INTEGER NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
     group_id   INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
@@ -80,65 +80,34 @@ CREATE TABLE IF NOT EXISTS bot_groups (
     PRIMARY KEY (bot_id, group_id)
 );
 
--- Payloads originais usados para encaminhamento (1:1)
-CREATE TABLE IF NOT EXISTS forward_payloads (
-    message_id     INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
-    wa_message     TEXT    NOT NULL,         -- JSON completo da Baileys
-    PRIMARY KEY (message_id)
-);
-
--- Eventos de leitura de mensagem (N:N)
-CREATE TABLE IF NOT EXISTS message_reads (
-    message_id   INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
-    member_id    INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
-    group_id     INTEGER REFERENCES groups(id), -- pode ser NULL
-    timestamp    TEXT    NOT NULL,           -- ISO datetime do evento
-    PRIMARY KEY (message_id, member_id, group_id, timestamp)
-);
-
--- Eventos de entrada/saída de membros em grupos (N:N)
-CREATE TABLE IF NOT EXISTS group_member_events (
-    group_id     INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
-    member_id    INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
-    event_type   TEXT    NOT NULL,           -- 'join' ou 'leave'
-    timestamp    TEXT    NOT NULL,           -- ISO datetime do evento
-    PRIMARY KEY (group_id, member_id, event_type, timestamp)
-);
-
--- Mensagens enviadas para bots (N:N)
+-- Messages sent to bots (N:N)
 CREATE TABLE IF NOT EXISTS bot_messages (
     message_id  INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
     bot_id      INTEGER NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
     PRIMARY KEY (message_id, bot_id)
 );
 
--- Índices sugeridos para acelerar queries de estatísticas básicas:
+-- Suggested indexes to speed up basic statistics queries:
 
--- Busca rápida dos grupos por bot
+-- Fast search of groups by bot
 CREATE INDEX IF NOT EXISTS idx_bot_groups_bot_id ON bot_groups(bot_id);
 
--- Busca rápida dos bots por grupo (útil para reverso)
+-- Fast search of bots by group (useful for reverse lookup)
 CREATE INDEX IF NOT EXISTS idx_bot_groups_group_id ON bot_groups(group_id);
 
--- Consulta eficiente dos membros por grupo
+-- Efficient query of members by group
 CREATE INDEX IF NOT EXISTS idx_group_members_group_id ON group_members(group_id);
 
--- Consulta eficiente de eventos de leitura por mensagem
-CREATE INDEX IF NOT EXISTS idx_message_reads_message_id ON message_reads(message_id);
-
--- Consulta eficiente de eventos por grupo
-CREATE INDEX IF NOT EXISTS idx_group_member_events_group_id ON group_member_events(group_id);
-
--- Consulta por número autorizado dentro de um bot específico (evita scan)
+-- Query for authorized number within a specific bot (avoids scan)
 CREATE INDEX IF NOT EXISTS idx_authorized_numbers_bot_id ON authorized_numbers(bot_id);
 
--- Consulta de mensagens recebidas por remetente
+-- Query of messages received by sender
 CREATE INDEX IF NOT EXISTS idx_messages_sender_jid ON messages(sender_jid);
 
--- Consulta eficiente dos bots por mensagem
+-- Efficient query of bots by message
 CREATE INDEX IF NOT EXISTS idx_message_bots_message_id ON bot_messages(message_id);
 
--- Consulta eficiente das mensagens por bot
+-- Efficient query of messages by bot
 CREATE INDEX IF NOT EXISTS idx_message_bots_bot_id ON bot_messages(bot_id);
 `;
 

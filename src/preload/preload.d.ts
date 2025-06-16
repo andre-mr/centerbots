@@ -64,5 +64,9 @@ declare global {
       onConfirmExit: (callback: () => void) => void;
       sendExitResponse: (shouldClose: boolean) => void;
     };
+    appUpdater: {
+      onUpdateDownloaded: (callback: () => void) => void;
+      confirmInstall: () => void;
+    };
   }
 }

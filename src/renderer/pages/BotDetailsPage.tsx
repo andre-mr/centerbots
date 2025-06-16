@@ -4,6 +4,7 @@ import {
   Status,
   WhatsAppSources,
   SendMethods,
+  LinkParameters,
 } from "../../models/bot-options-model";
 import {
   MdCheckCircle,
@@ -37,6 +38,13 @@ const sendMethodsTranslations = {
   [SendMethods.Text]: "Texto",
   [SendMethods.Image]: "Imagem",
   [SendMethods.Forward]: "Encaminhar",
+};
+
+const linkParametersTranslations = {
+  [LinkParameters.All]: "Todos",
+  [LinkParameters.Source]: "Origem",
+  [LinkParameters.Medium]: "Grupo",
+  [LinkParameters.None]: "Nenhum",
 };
 
 const enumToOptions = (
@@ -240,7 +248,7 @@ const BotDetailsPage: React.FC<BotDetailsProps> = ({
               className="font-semibold text-gray-700 dark:text-gray-200"
               htmlFor="campaign"
             >
-              Campanha
+              Nome da campanha
             </label>
             <input
               id="campaign"
@@ -338,6 +346,23 @@ const BotDetailsPage: React.FC<BotDetailsProps> = ({
               onChange={handleChange}
             >
               {enumToOptions(WhatsAppSources, messageListenModesTranslations)}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label
+              className="font-semibold text-gray-700 dark:text-gray-200"
+              htmlFor="linkParameters"
+            >
+              Parâmetros de links
+            </label>
+            <select
+              id="linkParameters"
+              name="LinkParameters"
+              className="rounded border bg-white px-1.5 py-2 dark:bg-gray-800 dark:text-gray-100"
+              value={formData.LinkParameters}
+              onChange={handleChange}
+            >
+              {enumToOptions(LinkParameters, linkParametersTranslations)}
             </select>
           </div>
         </form>

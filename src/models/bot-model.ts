@@ -3,6 +3,7 @@ import {
   WhatsAppSources,
   SendMethods,
   SendingMessageInfo,
+  LinkParameters,
 } from "./bot-options-model";
 
 export class Bot {
@@ -14,7 +15,7 @@ export class Bot {
     public SendMethod: SendMethods,
     public DelayBetweenGroups: number,
     public DelayBetweenMessages: number,
-    public LinkTrackingDomains: string | null,
+    public LinkParameters: LinkParameters,
     public Updated: string,
 
     public Active: boolean, // in-memory, not stored in DB

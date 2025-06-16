@@ -29,6 +29,13 @@ export function setupIpcHandlers() {
   });
 
   ipcMain.handle("bots:create", async (_event, bot: Bot) => {
+    const currentBots = await getAllBots();
+    if (currentBots.length >= 6) {
+      throw new Error(
+        "Não é possível adicionar mais bots. O limite de 6 bots foi atingido."
+      );
+    }
+
     if (!bot.WaNumber) {
       bot.WaNumber = Date.now().toString();
       const authDir = path.join(app.getPath("userData"), "auth", bot.WaNumber);

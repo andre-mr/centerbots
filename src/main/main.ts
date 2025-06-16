@@ -1,10 +1,13 @@
 import { app, shell, BrowserWindow } from "electron";
 import { join } from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
-import { checkEmptyDatabaseAndSeed } from "./db-mock";
 import { setupIpcHandlers } from "./ipc-handlers";
-import { dbReady } from "./db-connection";
 import { getWaManager } from "./wa-manager";
+import { autoUpdater } from "electron-updater";
+import { ipcMain } from "electron";
+import { purgeOldMessages } from "./db-commands";
+
+let mainWindow: BrowserWindow | null = null;
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -63,32 +66,48 @@ function createWindow(): BrowserWindow {
   return mainWindow;
 }
 
-app.whenReady().then(() => {
+function setupAutoUpdater(win: BrowserWindow) {
+  autoUpdater.autoDownload = true;
+
+  autoUpdater.on("update-downloaded", () => {
+    win.webContents.send("update-downloaded");
+  });
+
+  autoUpdater.checkForUpdates();
+
+  ipcMain.on("confirm-update-install", () => {
+    autoUpdater.quitAndInstall();
+  });
+}
+
+app.whenReady().then(async () => {
   electronApp.setAppUserModelId("com.electron");
 
   app.on("browser-window-created", (_, window) => {
     optimizer.watchWindowShortcuts(window);
   });
 
-  const mainWindow = createWindow();
+  mainWindow = createWindow();
+
+  try {
+    const purged = await purgeOldMessages(30);
+    if (purged > 0) {
+      console.log(`Expurgadas ${purged} mensagens antigas do banco de dados.`);
+    }
+  } catch (err) {
+    console.error("Erro ao expurgar mensagens antigas:", err);
+  }
+
   const waManager = getWaManager(mainWindow);
 
   mainWindow.webContents.once("did-finish-load", () => {
     waManager.init();
   });
 
+  setupAutoUpdater(mainWindow);
+
   app.on("activate", function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
-
-  dbReady.then(() => {
-    checkEmptyDatabaseAndSeed().then((isEmpty) => {
-      if (isEmpty) {
-        console.log("✅ Database is empty. Mock data seeded.");
-      } else {
-        // console.log("❌ Database is not empty. No mock data seeded.");
-      }
-    });
   });
 });
 

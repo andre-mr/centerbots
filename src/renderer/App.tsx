@@ -11,6 +11,7 @@ import {
   Status,
   WhatsAppSources,
   SendMethods,
+  LinkParameters,
 } from "../models/bot-options-model";
 import { useSettings } from "./contexts/SettingsContext";
 import BotMessagesPage from "./pages/BotMessagesPage";
@@ -25,6 +26,7 @@ const App: React.FC = () => {
   const [botForGroups, setBotForGroups] = useState<Bot | null>(null);
   const [botForMessages, setBotForMessages] = useState<Bot | null>(null);
   const [showExitModal, setShowExitModal] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
   const { settings } = useSettings();
 
   const menuItems = [
@@ -42,7 +44,7 @@ const App: React.FC = () => {
       SendMethods.Forward,
       2,
       10,
-      null,
+      LinkParameters.None,
       new Date().toISOString(),
       false,
       [],
@@ -150,9 +152,21 @@ const App: React.FC = () => {
     }
   }, []);
 
+  useEffect(() => {
+    if (window.appUpdater) {
+      window.appUpdater.onUpdateDownloaded(() => {
+        setShowUpdateModal(true);
+      });
+    }
+  }, []);
+
   const handleExitConfirm = (shouldClose: boolean) => {
     window.appExit.sendExitResponse(shouldClose);
     setShowExitModal(false);
+  };
+
+  const handleUpdateConfirm = () => {
+    window.appUpdater.confirmInstall();
   };
 
   return (
@@ -214,6 +228,31 @@ const App: React.FC = () => {
                 onClick={() => handleExitConfirm(true)}
               >
                 Confirmar saída
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showUpdateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="rounded bg-white p-6 shadow-lg dark:bg-gray-800">
+            <h2 className="mb-4 text-xl font-bold">Atualização disponível</h2>
+            <p className="mb-6">
+              Uma nova versão foi baixada e está pronta para ser instalada.
+              <br />O aplicativo será reiniciado para concluir a atualização.
+            </p>
+            <div className="flex justify-between gap-2">
+              <button
+                className="rounded bg-gray-200 px-4 py-2"
+                onClick={() => setShowUpdateModal(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                className="rounded bg-emerald-600 px-4 py-2 text-white"
+                onClick={handleUpdateConfirm}
+              >
+                Reiniciar e atualizar agora
               </button>
             </div>
           </div>

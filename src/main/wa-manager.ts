@@ -9,6 +9,7 @@ import {
   Status,
   WhatsAppSources,
   SendMethods,
+  LinkParameters,
 } from "../models/bot-options-model";
 import {
   getAllBots,
@@ -316,7 +317,6 @@ export class WaManager {
 
         if (!content) continue;
 
-        // NOVO: obter buffer de imagem se SendMethod for Image
         let imageBufferSet: {
           processedBuffer: Buffer;
           processedBufferBase64: string;
@@ -435,18 +435,15 @@ export class WaManager {
     this.ensureBotQueueState(botId);
     const state = this.botQueueStates.get(botId)!;
     const instance = this.bots.get(botId);
-    if (!instance || state.sending || state.paused) {
-      console.log(
-        `Bot ${botId} is either not registered, already sending, or paused.`
-      );
-      return;
-    }
-    if (!instance.socket || !instance.groupMetadataCache) {
-      console.log(`Bot ${botId} is not connected or has no group metadata.`);
-      return;
-    }
-    if (instance.messageQueue.length === 0) {
-      console.log(`Bot ${botId} has no messages in the queue.`);
+
+    if (
+      !instance ||
+      state.sending ||
+      state.paused ||
+      !instance.socket ||
+      !instance.groupMetadataCache ||
+      instance.messageQueue.length === 0
+    ) {
       return;
     }
 
@@ -671,24 +668,77 @@ export function getWaManager(mainWindow?: Electron.BrowserWindow) {
   return waManager!;
 }
 
+function sanitizeGroupName(name: string): string {
+  return name
+    .replace(/\s+/g, "-")
+    .replace(/[^a-zA-Z0-9\-_]/g, "")
+    .toLowerCase();
+}
+
+function addUtmParamsToLinks(
+  content: string,
+  params: { source?: string; medium?: string }
+): string {
+  return content.replace(/https?:\/\/[^\s]+/g, (url) => {
+    try {
+      const urlObj = new URL(url);
+      if (params.source) urlObj.searchParams.set("utm_source", params.source);
+      if (params.medium) urlObj.searchParams.set("utm_medium", params.medium);
+      return urlObj.toString();
+    } catch {
+      return url;
+    }
+  });
+}
+
+async function delay(base: number, randomRange?: number): Promise<void> {
+  const minBase = Math.max(1000, base);
+  let ms = minBase;
+  if (randomRange !== undefined) {
+    const safeRange = Math.max(0, randomRange);
+    ms = minBase + Math.floor(Math.random() * (safeRange * 2 + 1));
+  }
+  await new Promise((res) => setTimeout(res, ms));
+}
+
 async function sendMessageToGroup(
   instance: BotInstance,
   message: Message,
   groupJid: string
 ) {
-  console.log(
-    `Enviando mensagem para o grupo ${groupJid} com método ${instance.bot.SendMethod}`
-  );
   const isMedia =
     message.WaMessage?.message?.imageMessage ||
     message.WaMessage?.message?.videoMessage ||
     message.WaMessage?.message?.ephemeralMessage?.message?.imageMessage ||
     message.WaMessage?.message?.ephemeralMessage?.message?.videoMessage;
 
+  let contentToSend = message.Content ?? "";
+  if (instance.bot.SendMethod !== SendMethods.Forward && contentToSend) {
+    const linkParam = instance.bot.LinkParameters;
+    let params: { source?: string; medium?: string } = {};
+    if (
+      linkParam === LinkParameters.Source ||
+      linkParam === LinkParameters.All
+    ) {
+      params.source = "whatsapp";
+    }
+    if (
+      linkParam === LinkParameters.Medium ||
+      linkParam === LinkParameters.All
+    ) {
+      const groupMeta =
+        instance.groupMetadataCache?.[groupJid]?.subject || groupJid;
+      params.medium = sanitizeGroupName(groupMeta);
+    }
+    if (linkParam !== LinkParameters.None) {
+      contentToSend = addUtmParamsToLinks(contentToSend, params);
+    }
+  }
+
   if (message.Image) {
     await instance.socket?.sendMessage(groupJid, {
       image: message.Image,
-      caption: message.Content ?? undefined,
+      caption: contentToSend,
       mimetype: "image/jpeg",
       jpegThumbnail:
         message.ImageThumbnailBase64 || message.Image.toString("base64"),
@@ -702,17 +752,7 @@ async function sendMessageToGroup(
     });
   } else {
     await instance.socket?.sendMessage(groupJid, {
-      text: message.Content ?? "",
+      text: contentToSend,
     });
   }
-}
-
-async function delay(base: number, randomRange?: number): Promise<void> {
-  const minBase = Math.max(1000, base);
-  let ms = minBase;
-  if (randomRange !== undefined) {
-    const safeRange = Math.max(0, randomRange);
-    ms = minBase + Math.floor(Math.random() * (safeRange * 2 + 1));
-  }
-  await new Promise((res) => setTimeout(res, ms));
 }

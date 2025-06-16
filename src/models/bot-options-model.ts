@@ -18,6 +18,13 @@ export enum SendMethods {
   Forward = "Forward",
 }
 
+export enum LinkParameters {
+  All = "all",
+  Source = "source",
+  Medium = "medium",
+  None = "none",
+}
+
 export interface SendingMessageInfo {
   content: string;
   currentGroup: string;

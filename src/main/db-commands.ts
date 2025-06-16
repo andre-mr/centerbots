@@ -8,6 +8,7 @@ import {
   Status,
   WhatsAppSources,
   SendMethods,
+  LinkParameters,
 } from "../models/bot-options-model";
 import { PlanStatus, PlanTier } from "../models/app-settings-options-model";
 import { BotGroup } from "../models/bot-group";
@@ -268,12 +269,7 @@ export async function getMemberByIdAndGroup(
     SELECT
       m.id,
       m.member_jid,
-      gm.is_admin,
-      (
-        SELECT MAX(mr.timestamp)
-        FROM message_reads mr
-        WHERE mr.member_id = m.id
-      ) AS last_read
+      gm.is_admin
     FROM group_members AS gm
     JOIN members AS m ON m.id = gm.member_id
     WHERE gm.member_id = ? AND gm.group_id = ?
@@ -283,11 +279,8 @@ export async function getMemberByIdAndGroup(
     id: number;
     member_jid: string;
     is_admin: number;
-    last_read: string | null;
   }>(sql, [memberId, groupId]);
-  return row
-    ? new Member(row.id, row.member_jid, !!row.is_admin, row.last_read)
-    : null;
+  return row ? new Member(row.id, row.member_jid, !!row.is_admin) : null;
 }
 
 export async function getAllMembers(): Promise<Member[]> {
@@ -309,12 +302,9 @@ export async function getMembersByGroupId(groupId: number): Promise<Member[]> {
     SELECT
       m.id,
       m.member_jid,
-      gm.is_admin,
-      MAX(me.timestamp) AS last_read
+      gm.is_admin
     FROM group_members AS gm
     JOIN members AS m ON m.id = gm.member_id
-    LEFT JOIN message_reads AS me
-      ON me.member_id = m.id
     WHERE gm.group_id = ?
     GROUP BY m.id, m.member_jid, gm.is_admin
   `;
@@ -322,11 +312,8 @@ export async function getMembersByGroupId(groupId: number): Promise<Member[]> {
     id: number;
     member_jid: string;
     is_admin: number;
-    last_read: string | null;
   }>(sql, [groupId]);
-  return rows.map(
-    (r) => new Member(r.id, r.member_jid, !!r.is_admin, r.last_read)
-  );
+  return rows.map((r) => new Member(r.id, r.member_jid, !!r.is_admin));
 }
 
 export async function updateGroupMemberAdmin(
@@ -483,27 +470,13 @@ export async function getMessagesByPeriod(
   );
 }
 
-/** FORWARD_PAYLOADS **/
-
-export async function createForwardPayload(
-  messageId: number,
-  waMessage: string
-): Promise<number> {
-  const sql = `
-    INSERT INTO forward_payloads (message_id, wa_message)
-    VALUES (?, ?)
-  `;
-  const { lastID } = await run(sql, [messageId, waMessage]);
-  return lastID;
-}
-
 /** BOTS **/
 
 export async function createBot(bot: Bot): Promise<number> {
   const sql = `
     INSERT INTO bots (
       wa_number, campaign, whatsapp_sources, send_method, delay_between_groups, 
-      delay_between_messages, link_tracking_domains, updated
+      delay_between_messages, link_parameters, updated
     )
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `;
@@ -514,7 +487,7 @@ export async function createBot(bot: Bot): Promise<number> {
     bot.SendMethod,
     bot.DelayBetweenGroups,
     bot.DelayBetweenMessages,
-    bot.LinkTrackingDomains,
+    bot.LinkParameters,
     new Date().toISOString(),
   ]);
   if (bot.AuthorizedNumbers) {
@@ -532,7 +505,7 @@ export async function updateBot(bot: Bot): Promise<void> {
            send_method = ?,
            delay_between_groups = ?,
            delay_between_messages = ?,
-           link_tracking_domains = ?,
+           link_parameters = ?,
            updated = ?
      WHERE id = ?
   `;
@@ -543,7 +516,7 @@ export async function updateBot(bot: Bot): Promise<void> {
     bot.SendMethod,
     bot.DelayBetweenGroups,
     bot.DelayBetweenMessages,
-    bot.LinkTrackingDomains,
+    bot.LinkParameters,
     new Date().toISOString(),
     bot.Id,
   ]);
@@ -567,7 +540,7 @@ export async function getBotById(id: number): Promise<Bot | null> {
       b.send_method,
       b.delay_between_groups,
       b.delay_between_messages,
-      b.link_tracking_domains,
+      b.link_parameters,
       b.updated,
       COALESCE(bg.count_groups, 0) AS total_groups,
       GROUP_CONCAT(an.wa_number) AS authorized_numbers
@@ -589,7 +562,7 @@ export async function getBotById(id: number): Promise<Bot | null> {
     send_method: string;
     delay_between_groups: number;
     delay_between_messages: number;
-    link_tracking_domains: string | null;
+    link_parameters: string | null;
     updated: string;
     total_groups: number;
     authorized_numbers: string | null;
@@ -606,7 +579,7 @@ export async function getBotById(id: number): Promise<Bot | null> {
         row.send_method as SendMethods,
         row.delay_between_groups,
         row.delay_between_messages,
-        row.link_tracking_domains,
+        row.link_parameters as LinkParameters,
         row.updated,
         false,
         authorizedNumbers,
@@ -627,7 +600,7 @@ export async function getAllBots(): Promise<Bot[]> {
       b.send_method,
       b.delay_between_groups,
       b.delay_between_messages,
-      b.link_tracking_domains,
+      b.link_parameters,
       b.updated,
       COALESCE(bg.count_groups, 0) AS total_groups,
       GROUP_CONCAT(an.wa_number) AS authorized_numbers
@@ -648,7 +621,7 @@ export async function getAllBots(): Promise<Bot[]> {
     send_method: string;
     delay_between_groups: number;
     delay_between_messages: number;
-    link_tracking_domains: string | null;
+    link_parameters: string | null;
     updated: string;
     total_groups: number;
     authorized_numbers: string | null;
@@ -665,7 +638,7 @@ export async function getAllBots(): Promise<Bot[]> {
       row.send_method as SendMethods,
       row.delay_between_groups,
       row.delay_between_messages,
-      row.link_tracking_domains,
+      row.link_parameters as LinkParameters,
       row.updated,
       false,
       authorizedNumbers,
@@ -821,33 +794,13 @@ export async function createGroupMember(
   return lastID;
 }
 
-/** MESSAGE_EVENTS **/
-export async function createMessageEvent(
-  messageId: number,
-  memberId: string,
-  timestamp: string
-): Promise<number> {
-  const sql = `
-    INSERT INTO message_reads (message_id, member_id, timestamp) -- Changed table name
-    VALUES (?, ?, ?)
-  `;
-  const { lastID } = await run(sql, [messageId, memberId, timestamp]);
-  return lastID;
-}
-
-/** GROUP_MEMBER_EVENTS **/
-export async function createGroupMemberEvent(
-  groupId: number,
-  memberId: string,
-  eventType: string,
-  timestamp: string
-): Promise<number> {
-  const sql = `
-    INSERT INTO group_member_events (group_id, member_id, event_type, timestamp)
-    VALUES (?, ?, ?, ?)
-  `;
-  const { lastID } = await run(sql, [groupId, memberId, eventType, timestamp]);
-  return lastID;
+export async function purgeOldMessages(days: number = 30): Promise<number> {
+  const cutoff = new Date(
+    Date.now() - days * 24 * 60 * 60 * 1000
+  ).toISOString();
+  const sql = `DELETE FROM messages WHERE timestamp < ?`;
+  const { changes } = await run(sql, [cutoff]);
+  return changes;
 }
 
 /** BOT GROUPS & MEMBERS STATS **/

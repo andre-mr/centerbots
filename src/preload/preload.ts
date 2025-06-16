@@ -78,10 +78,8 @@ if (process.contextIsolated) {
     console.error(error);
   }
 } else {
-  // @ts-ignore (define in dts)
-  window.electron = electronAPI;
-  // @ts-ignore (define in dts)
-  window.appApi = exposedApi;
+  (window as any).electron = electronAPI;
+  (window as any).appApi = exposedApi;
 }
 
 contextBridge.exposeInMainWorld("appExit", {
@@ -90,5 +88,14 @@ contextBridge.exposeInMainWorld("appExit", {
   },
   sendExitResponse: (shouldClose: boolean) => {
     ipcRenderer.send("app:confirm-exit-response", shouldClose);
+  },
+});
+
+contextBridge.exposeInMainWorld("appUpdater", {
+  onUpdateDownloaded: (callback: () => void) => {
+    ipcRenderer.on("update-downloaded", callback);
+  },
+  confirmInstall: () => {
+    ipcRenderer.send("confirm-update-install");
   },
 });
