@@ -10,9 +10,9 @@ import {
 import { useSettings } from "../contexts/SettingsContext";
 
 const planStatusLabels: Record<PlanStatus, string> = {
-  [PlanStatus.Valid]: "Válido",
+  [PlanStatus.Valid]: "Ativo",
   [PlanStatus.GracePeriod]: "Expirado",
-  [PlanStatus.Invalid]: "Inválido",
+  [PlanStatus.Invalid]: "Inativo",
 };
 
 const planTierLabels: Record<PlanTier, string> = {
@@ -118,10 +118,10 @@ const SettingsPage: React.FC = () => {
                   </label>
                   <input
                     id="userInfo"
-                    name="UserInfo"
+                    name="UserId"
                     type="text"
                     className="rounded border bg-white px-2 py-2 dark:bg-gray-800 dark:text-gray-100"
-                    value={settings.UserInfo || ""}
+                    value={settings.UserId || ""}
                     placeholder="Ex: 5534988881111"
                     onChange={handleChange}
                   />
@@ -135,10 +135,10 @@ const SettingsPage: React.FC = () => {
                   </label>
                   <input
                     id="apiKey"
-                    name="ApiKey"
+                    name="LicenseKey"
                     type="text"
                     className="rounded border bg-white px-2 py-2 dark:bg-gray-800 dark:text-gray-100"
-                    value={settings.ApiKey || ""}
+                    value={settings.LicenseKey || ""}
                     placeholder="Digite sua chave"
                     onChange={handleChange}
                   />
@@ -175,7 +175,7 @@ const SettingsPage: React.FC = () => {
                     Última verificação:
                   </span>
                   <span className="text-gray-800 dark:text-gray-100">
-                    {new Date(settings.LastChecked).toLocaleDateString()}
+                    {new Date(settings.LastCheckin).toLocaleDateString()}
                   </span>
                 </div>
               </div>

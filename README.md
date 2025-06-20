@@ -1,16 +1,16 @@
 # CenterBots
 
-**CenterBots** é uma aplicação desktop baseada em Electron e TypeScript que permite criar, gerenciar e operar múltiplos bots de WhatsApp utilizando a biblioteca [Baileys](https://github.com/WhiskeySockets/Baileys). O projeto oferece uma interface moderna, persistência local via SQLite e integrações para automação de mensagens, gerenciamento de grupos, envio de mídia e muito mais.
+**CenterBots** é uma aplicação desktop baseada em Electron e TypeScript para **replicar mensagens recebidas para múltiplos grupos do WhatsApp**. A aplicação permite que múltiplos números (bots) sejam conectados. Cada bot "escuta" mensagens vindas de números autorizados e, ao receber uma, a coloca em uma fila para ser disparada para uma lista de grupos pré-definida.
 
 ---
 
 ## ✨ Proposta
 
-- Automatizar interações no WhatsApp via bots multi-dispositivo.
+- Replicar uma mensagem recebida de uma fonte autorizada para múltiplos grupos do WhatsApp.
 - Gerenciar múltiplos números/bots simultaneamente em uma única aplicação.
-- Oferecer interface desktop multiplataforma (Windows, macOS, Linux).
+- Interface desktop multiplataforma (Windows, macOS, Linux).
 - Persistir dados e configurações localmente com banco SQLite.
-- Facilitar integrações e extensões para casos de uso variados (atendimento, notificações, marketing autorizado, etc).
+- Foco em praticidade, controle da fila de envio e segurança dos dados.
 
 ---
 
@@ -24,41 +24,21 @@
 - **TailwindCSS**: Utilitários CSS para UI moderna.
 - **ESLint & Prettier**: Padronização e qualidade do código.
 - **Pino**: Logger eficiente para Node.js.
-- **Outras**: Node.js, PostCSS, scripts utilitários.
 
 ---
 
 ## 🚀 Funcionalidades Principais
 
 - **Gerenciamento de múltiplos bots**: Cada bot opera com credenciais isoladas, permitindo múltiplos números de WhatsApp.
-- **Reconexão automática**: Persistência de sessão e lógica de reconexão inteligente.
-- **Envio e recebimento de mensagens**: Texto, mídia (imagens, áudios, vídeos, documentos), enquetes, reações, etc.
-- **Mensagens temporárias**: Ativação/desativação e detecção de mensagens efêmeras.
-- **Gerenciamento de grupos**: Criação, adição/remoção de participantes, obtenção de metadados.
-- **Confirmação de entrega/leitura**: Recebimento de recibos (ticks cinza/azul) e marcação de mensagens como lidas.
-- **Cache local de grupos/contatos**: Sincronização eficiente com o WhatsApp.
-- **Interface desktop**: Experiência de uso moderna, multiplataforma e responsiva.
-- **Scripts de build, lint, typecheck e empacotamento**.
+- **Disparo para grupos acionado por mensagem**: O envio é iniciado quando o bot recebe uma mensagem (texto, imagem, etc.) de um número autorizado.
+- **Controle de números autorizados**: Defina quais números de WhatsApp podem "comandar" um bot para iniciar os disparos.
+- **Gerenciamento de grupos de destino**: Para cada bot, selecione para quais grupos as mensagens serão replicadas.
+- **Fila de envio por bot**: Visualize, reordene e remova mensagens da fila de envio.
+- **Visualização de status em tempo real**: Acompanhe o status de cada bot (Online, Enviando, Desconectado).
 
 ---
 
-## 📦 Estrutura do Projeto
-
-```
-├── src/                # Código-fonte principal (Electron, bots, models, etc)
-├── dev/                # Scripts, backups e utilitários de desenvolvimento
-├── resources/          # Recursos estáticos (ícones, imagens)
-├── doc/                # Documentação técnica detalhada (ex: Baileys)
-├── package.json        # Dependências e scripts npm
-├── electron.vite.config.ts
-├── tailwind.config.js
-├── tsconfig*.json
-└── README.md
-```
-
----
-
-## 🖥️ Como Rodar o Projeto
+## 🖥️ Como Usar
 
 1. **Pré-requisitos**:
 
@@ -98,32 +78,33 @@
 
 ---
 
-## 📝 Scripts NPM Úteis
+## 📝 Fluxo de Uso
 
-- `format` — Formata o código com Prettier.
-- `lint` — Analisa problemas de estilo/código com ESLint.
-- `typecheck` — Checa tipos TypeScript (Node + Web).
-- `dev` — Inicia Electron em modo desenvolvimento.
-- `start` — Preview de produção.
-- `build` — Build de produção.
-- `build:win|mac|linux` — Empacota para cada SO.
-- Veja [dev/scripts-npm.md](dev/scripts-npm.md) para detalhes.
+1. **Adicionar um bot**: Clique em <kbd>Adicionar Bot</kbd>, preencha as informações e ative-o para ler o QR Code com o WhatsApp do número desejado.
+2. **Configurar o bot**:
+   - Na tela de configuração, defina os **"Números autorizados"**. Apenas mensagens vindas desses números irão acionar os envios.
+   - Configure outras opções, como pausas entre envios.
+3. **Selecionar grupos de destino**: Clique no botão <kbd>Grupos</kbd> no card do bot e selecione para quais grupos ele deve enviar as mensagens recebidas.
+4. **Iniciar um disparo**: Envie uma mensagem (texto, imagem, etc.) de um dos **números autorizados** para o número do bot.
+5. **Acompanhar o envio**: A aplicação irá automaticamente adicionar a mensagem à fila do bot e começar a enviá-la para os grupos selecionados. Você pode acompanhar o progresso e gerenciar a fila na tela de <kbd>Mensagens</kbd>.
 
 ---
 
 ## 📚 Documentação
 
-- [doc/baileys.md](doc/baileys.md): Guia técnico completo sobre a biblioteca Baileys, exemplos de uso, eventos, tipos, melhores práticas e dicas para evitar banimentos.
+- [doc/baileys.md](doc/baileys.md): Guia técnico sobre a biblioteca Baileys.
 - [dev/scripts-npm.md](dev/scripts-npm.md): Explicação dos scripts npm do projeto.
 
 ---
 
 ## 🔒 Boas Práticas e Avisos
 
-- **Evite spam e automações abusivas**: O uso de bots não-oficiais pode violar os termos do WhatsApp. Use de forma ética e responsável.
+- **Evite disparos excessivos**: O uso abusivo pode resultar em bloqueio do número pelo WhatsApp.
+- **Use com consentimento**: Certifique-se de que os membros dos grupos de destino concordam em receber as mensagens.
+- **Não utilize para spam**.
 - **Atualize sempre o Baileys**: Para manter compatibilidade com o WhatsApp Web.
-- **Gerencie credenciais com cuidado**: Cada bot deve ter seu diretório de autenticação.
-- **Respeite privacidade**: Não armazene mensagens temporárias além do prazo definido.
+- **Gerencie credenciais com cuidado**: Cada bot tem seu diretório de autenticação.
+- **Os dados ficam armazenados localmente**.
 
 ---
 
@@ -145,4 +126,4 @@ Dúvidas, sugestões ou problemas? Abra uma issue ou entre em contato pelo repos
 
 ---
 
-**CenterBots** — Automação de WhatsApp com robustez, flexibilidade e foco em boas
+**CenterBots** — Replicação de mensagens para grupos do WhatsApp, de forma simples e eficiente.

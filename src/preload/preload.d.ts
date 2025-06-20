@@ -54,6 +54,10 @@ interface ExposedApi {
   moveMessageUp: (botId: number, idx: number) => Promise<void>;
   moveMessageDown: (botId: number, idx: number) => Promise<void>;
   deleteMessageFromQueue: (botId: number, idx: number) => Promise<void>;
+
+  onLicenseInvalid: (callback: () => void) => () => void;
+  onLicenseGrace: (callback: () => void) => () => void;
+  onLicenseValid: (callback: () => void) => () => void;
 }
 
 declare global {

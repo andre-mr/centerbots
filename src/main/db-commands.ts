@@ -47,27 +47,54 @@ function run(
 /** APP_CONFIG **/
 
 export async function getAppSettings(): Promise<AppSettings | null> {
-  const sql = `SELECT id, api_key, auth_token, dark_mode, user_info, plan_status, plan_tier, last_checked FROM app_config WHERE id = 1`;
+  const sql = `
+    SELECT
+      id,
+      license_key,
+      dark_mode,
+      user_id,
+      plan_status,
+      plan_tier,
+      registered_bots,
+      app_version,
+      machine_id,
+      last_ip,
+      last_checkin,
+      platform
+    FROM app_config
+    WHERE id = 1
+  `;
   return get<{
     id: number;
-    api_key: string | null;
-    auth_token: string | null;
+    license_key: string | null;
     dark_mode: number;
-    user_info: string | null;
+    user_id: string | null;
     plan_status: string;
     plan_tier: string;
-    last_checked: string;
+    registered_bots: string;
+    app_version: string;
+    machine_id: string | null;
+    last_ip: string | null;
+    last_checkin: string;
+    platform: string | null;
   }>(sql).then((row) => {
     if (row) {
       const settings = new AppSettings();
-      settings.Id = row.id;
-      settings.ApiKey = row.api_key;
-      settings.AuthToken = row.auth_token;
+      settings.LicenseKey = row.license_key;
       settings.DarkMode = !!row.dark_mode;
-      settings.UserInfo = row.user_info;
+      settings.UserId = row.user_id;
       settings.PlanStatus = row.plan_status as PlanStatus;
       settings.PlanTier = row.plan_tier as PlanTier;
-      settings.LastChecked = row.last_checked;
+      try {
+        settings.RegisteredBots = JSON.parse(row.registered_bots || "[]");
+      } catch {
+        settings.RegisteredBots = [];
+      }
+      settings.AppVersion = row.app_version;
+      settings.MachineId = row.machine_id;
+      settings.LastIP = row.last_ip;
+      settings.LastCheckin = row.last_checkin;
+      settings.Platform = row.platform || "";
       return settings;
     }
     return null;
@@ -77,23 +104,31 @@ export async function getAppSettings(): Promise<AppSettings | null> {
 export async function updateAppSettings(settings: AppSettings): Promise<void> {
   const sql = `
     UPDATE app_config
-       SET api_key = ?,
-           auth_token = ?,
+       SET license_key = ?,
            dark_mode = ?,
-           user_info = ?,
+           user_id = ?,
            plan_status = ?,
            plan_tier = ?,
-           last_checked = ?
+           registered_bots = ?,
+           app_version = ?,
+           machine_id = ?,
+           last_ip = ?,
+           last_checkin = ?,
+           platform = ?
      WHERE id = 1
   `;
   await run(sql, [
-    settings.ApiKey,
-    settings.AuthToken,
+    settings.LicenseKey,
     +settings.DarkMode,
-    settings.UserInfo,
+    settings.UserId,
     settings.PlanStatus as string,
     settings.PlanTier as string,
-    settings.LastChecked,
+    JSON.stringify(settings.RegisteredBots ?? []),
+    settings.AppVersion,
+    settings.MachineId,
+    settings.LastIP,
+    settings.LastCheckin,
+    settings.Platform,
   ]);
 }
 

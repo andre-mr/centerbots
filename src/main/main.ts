@@ -1,11 +1,14 @@
+import "dotenv/config";
 import { app, shell, BrowserWindow } from "electron";
 import { join } from "path";
-import { electronApp, optimizer, is } from "@electron-toolkit/utils";
+import { electronApp, is } from "@electron-toolkit/utils";
 import { setupIpcHandlers } from "./ipc-handlers";
 import { getWaManager } from "./wa-manager";
 import { autoUpdater } from "electron-updater";
 import { ipcMain } from "electron";
+import cron from "node-cron";
 import { purgeOldMessages } from "./db-commands";
+import { checkLicense } from "./license-manager";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -83,11 +86,9 @@ function setupAutoUpdater(win: BrowserWindow) {
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId("com.electron");
 
-  app.on("browser-window-created", (_, window) => {
-    optimizer.watchWindowShortcuts(window);
-  });
-
   mainWindow = createWindow();
+
+  checkLicense(process.env.API_URL || "", mainWindow!);
 
   try {
     const purged = await purgeOldMessages(30);
@@ -105,6 +106,15 @@ app.whenReady().then(async () => {
   });
 
   setupAutoUpdater(mainWindow);
+
+  cron.schedule("0 1 * * *", async () => {
+    try {
+      await checkLicense(process.env.API_URL || "", mainWindow!);
+      console.log("Licença verificada com sucesso às 1h.");
+    } catch (err) {
+      console.error("Erro ao verificar licença:", err);
+    }
+  });
 
   app.on("activate", function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

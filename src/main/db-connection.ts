@@ -12,13 +12,17 @@ const schema = `
 -- General application configuration
 CREATE TABLE IF NOT EXISTS app_config (
     id                  INTEGER PRIMARY KEY CHECK (id = 1), -- ensures only one row
-    api_key             TEXT,
-    auth_token          TEXT,
-    dark_mode           INTEGER NOT NULL DEFAULT 0,       -- 0 = false, 1 = true
-    user_info           TEXT,                             -- JSON or free string
-    plan_status         TEXT    NOT NULL,                 -- PlanStatus: 'Valid', 'Grace', 'Invalid'
-    plan_tier           TEXT    NOT NULL,                 -- PlanTier: 'Basic', 'Full'
-    last_checked        TEXT    NOT NULL                  -- ISO datetime of last check
+    license_key         TEXT,                                -- License key for activation
+    dark_mode           INTEGER NOT NULL DEFAULT 0,          -- 0 = false, 1 = true (UI theme)
+    user_id             TEXT,                                -- User identifier
+    plan_status         TEXT    NOT NULL,                    -- PlanStatus: 'Valid', 'Grace', 'Invalid'
+    plan_tier           TEXT    NOT NULL,                    -- PlanTier: 'Basic', 'Full'
+    registered_bots     TEXT    NOT NULL DEFAULT '[]',       -- JSON array of registered bot IDs
+    app_version         TEXT    NOT NULL DEFAULT '1.0.0',    -- Application version
+    machine_id          TEXT,                                -- Unique machine identifier
+    last_ip             TEXT,                                -- Last known public IP address
+    last_checkin        TEXT    NOT NULL,                    -- ISO datetime of last license check
+    platform            TEXT                                 -- OS platform (windows, linux, darwin, etc.)
 );
 
 -- WhatsApp Bots
@@ -87,7 +91,7 @@ CREATE TABLE IF NOT EXISTS bot_messages (
     PRIMARY KEY (message_id, bot_id)
 );
 
--- Suggested indexes to speed up basic statistics queries:
+-- Indexes to speed up basic statistics queries:
 
 -- Fast search of groups by bot
 CREATE INDEX IF NOT EXISTS idx_bot_groups_bot_id ON bot_groups(bot_id);
@@ -128,8 +132,8 @@ export const dbReady: Promise<void> = new Promise((resolve, reject) => {
       reject(err);
     } else {
       const initSql = `
-        INSERT OR IGNORE INTO app_config (id, api_key, auth_token, dark_mode, user_info, plan_status, plan_tier, last_checked)
-        VALUES (1, NULL, NULL, 0, NULL, 'Grace', 'Basic', '${new Date().toISOString()}');
+        INSERT OR IGNORE INTO app_config (id, license_key, dark_mode, user_id, plan_status, plan_tier, registered_bots, app_version, machine_id, last_ip, last_checkin, platform)
+        VALUES (1, NULL, 0, NULL, 'Invalid', 'Basic', '[]', '1.0.0', NULL, NULL, '${new Date().toISOString()}', NULL);
       `;
       database.run(initSql, (initErr) => {
         if (initErr) {

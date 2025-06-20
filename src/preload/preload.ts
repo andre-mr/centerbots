@@ -68,6 +68,31 @@ const exposedApi = {
 
   updateBotGroupsBroadcast: (botId: number, groups: any[]) =>
     ipcRenderer.invoke("bots:updateBotGroupsBroadcast", botId, groups),
+
+  onLicenseInvalid: (callback: () => void) => {
+    const handler = () => {
+      console.log("[Preload] Evento license:invalid recebido");
+      callback();
+    };
+    ipcRenderer.on("license:invalid", handler);
+    return () => ipcRenderer.removeListener("license:invalid", handler);
+  },
+  onLicenseGrace: (callback: () => void) => {
+    const handler = () => {
+      console.log("[Preload] Evento license:grace recebido");
+      callback();
+    };
+    ipcRenderer.on("license:grace", handler);
+    return () => ipcRenderer.removeListener("license:grace", handler);
+  },
+  onLicenseValid: (callback: () => void) => {
+    const handler = () => {
+      console.log("[Preload] Evento license:valid recebido");
+      callback();
+    };
+    ipcRenderer.on("license:valid", handler);
+    return () => ipcRenderer.removeListener("license:valid", handler);
+  },
 };
 
 if (process.contextIsolated) {

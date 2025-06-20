@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { MdDashboard, MdSettings, MdHelpOutline } from "react-icons/md";
 import BotsPage from "./pages/BotsPage";
-import GroupsPage from "./pages/GroupsPage";
 import SettingsPage from "./pages/SettingsPage";
 import HelpPage from "./pages/HelpPage";
 import BotDetailsPage from "./pages/BotDetailsPage";
@@ -15,6 +14,7 @@ import {
 } from "../models/bot-options-model";
 import { useSettings } from "./contexts/SettingsContext";
 import BotMessagesPage from "./pages/BotMessagesPage";
+import { PlanStatus } from "../models/app-settings-options-model"; // adicione se não tiver
 
 const App: React.FC = () => {
   const [activeSection, setActiveSection] = useState("bots");
@@ -27,7 +27,7 @@ const App: React.FC = () => {
   const [botForMessages, setBotForMessages] = useState<Bot | null>(null);
   const [showExitModal, setShowExitModal] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
-  const { settings } = useSettings();
+  const { settings, refreshSettings } = useSettings();
 
   const menuItems = [
     { id: "bots", title: "Bots", icon: MdDashboard },
@@ -89,6 +89,12 @@ const App: React.FC = () => {
     setBotForMessages(null);
   };
 
+  useEffect(() => {
+    if (settings?.PlanStatus === PlanStatus.GracePeriod) {
+      setActiveSection("settings");
+    }
+  }, [settings?.PlanStatus]);
+
   const renderContent = () => {
     if (showBotMessages && botForMessages) {
       return (
@@ -110,6 +116,8 @@ const App: React.FC = () => {
 
     switch (activeSection) {
       case "bots":
+        if (settings?.PlanStatus === PlanStatus.Invalid)
+          return <SettingsPage />;
         return (
           <BotsPage
             onBotDetails={handleShowBotDetails}
@@ -118,13 +126,15 @@ const App: React.FC = () => {
             onShowMessages={handleShowBotMessages}
           />
         );
-      case "groups":
-        return <GroupsPage />;
       case "settings":
         return <SettingsPage />;
       case "help":
+        if (settings?.PlanStatus === PlanStatus.Invalid)
+          return <SettingsPage />;
         return <HelpPage />;
       default:
+        if (settings?.PlanStatus === PlanStatus.Invalid)
+          return <SettingsPage />;
         return (
           <BotsPage
             onBotDetails={handleShowBotDetails}
@@ -160,6 +170,32 @@ const App: React.FC = () => {
     }
   }, []);
 
+  useEffect(() => {
+    const removeInvalid = window.appApi.onLicenseInvalid(() => {
+      console.log("[App] Evento de licença inválida recebido");
+      setActiveSection("settings");
+      setShowBotDetails(false);
+      setShowBotGroups(false);
+      setShowBotMessages(false);
+      refreshSettings();
+    });
+    const removeGrace = window.appApi.onLicenseGrace(() => {
+      console.log("[App] Evento de licença em carência (grace) recebido");
+      setActiveSection("settings"); // SEM graceHandled!
+      refreshSettings();
+    });
+    const removeValid = window.appApi.onLicenseValid(() => {
+      console.log("[App] Evento de licença válida recebido");
+      refreshSettings();
+      setActiveSection("bots");
+    });
+    return () => {
+      removeInvalid();
+      removeGrace();
+      removeValid();
+    };
+  }, [refreshSettings]);
+
   const handleExitConfirm = (shouldClose: boolean) => {
     window.appExit.sendExitResponse(shouldClose);
     setShowExitModal(false);
@@ -183,6 +219,7 @@ const App: React.FC = () => {
                     : "text-gray-700 hover:bg-gray-200 dark:text-gray-200 dark:hover:bg-gray-800"
                 }`}
                 onClick={() => {
+                  if (settings?.PlanStatus === PlanStatus.Invalid) return;
                   setActiveSection(item.id);
                   setShowBotDetails(false);
                   setSelectedBot(null);
