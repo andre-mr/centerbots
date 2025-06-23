@@ -872,3 +872,39 @@ export async function getBotGroupsAndMembers(botId: number): Promise<{
     broadcastMembers: row?.broadcastMembers || 0,
   };
 }
+
+export async function getDatabaseBackup(): Promise<{
+  app_config: any[];
+  bots: any[];
+  authorized_numbers: any[];
+  groups: number;
+  bot_groups: number;
+  members: number;
+  messages: number;
+}> {
+  const appConfig = await all<any>(`SELECT * FROM app_config`);
+  const bots = await all<any>(`SELECT * FROM bots`);
+  const authorizedNumbers = await all<any>(`SELECT * FROM authorized_numbers`);
+  const [{ count: groups }] = await all<{ count: number }>(
+    `SELECT COUNT(*) as count FROM groups`
+  );
+  const [{ count: bot_groups }] = await all<{ count: number }>(
+    `SELECT COUNT(*) as count FROM bot_groups WHERE broadcast = 1`
+  );
+  const [{ count: members }] = await all<{ count: number }>(
+    `SELECT COUNT(*) as count FROM members`
+  );
+  const [{ count: messages }] = await all<{ count: number }>(
+    `SELECT COUNT(*) as count FROM messages`
+  );
+
+  return {
+    app_config: appConfig,
+    bots: bots,
+    authorized_numbers: authorizedNumbers,
+    groups,
+    bot_groups,
+    members,
+    messages,
+  };
+}

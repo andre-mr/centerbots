@@ -1,4 +1,8 @@
-import { getAppSettings, updateAppSettings } from "./db-commands";
+import {
+  getAppSettings,
+  updateAppSettings,
+  getDatabaseBackup,
+} from "./db-commands";
 import AppSettings from "../models/app-settings-model";
 import os from "os";
 import crypto from "crypto";
@@ -33,39 +37,46 @@ export async function checkLicense(
       return;
     }
 
-    let settings: AppSettings | null = await getAppSettings();
-    if (!settings) {
+    let appSettings: AppSettings | null = await getAppSettings();
+    if (!appSettings) {
       console.error("[License] Não foi possível obter settings do app.");
       return;
     }
 
-    if (!settings.UserId) settings.UserId = "";
-    if (!settings.LicenseKey) settings.LicenseKey = "";
-    if (!settings.MachineId) settings.MachineId = generateMachineId();
-    if (!settings.PlanStatus) settings.PlanStatus = PlanStatus.Invalid;
-    if (!settings.PlanTier) settings.PlanTier = PlanTier.Basic;
-    if (!settings.LastCheckin) settings.LastCheckin = new Date().toISOString();
+    if (!appSettings.UserId) appSettings.UserId = "";
+    if (!appSettings.LicenseKey) appSettings.LicenseKey = "";
+    if (!appSettings.MachineId) appSettings.MachineId = generateMachineId();
+    if (!appSettings.PlanStatus) appSettings.PlanStatus = PlanStatus.Invalid;
+    if (!appSettings.PlanTier) appSettings.PlanTier = PlanTier.Basic;
+    if (!appSettings.LastCheckin)
+      appSettings.LastCheckin = new Date().toISOString();
 
     const machineId = generateMachineId();
     const platform = os.platform();
     let changed = false;
-    if (settings.MachineId !== machineId) {
-      settings.MachineId = machineId;
+    if (appSettings.MachineId !== machineId) {
+      appSettings.MachineId = machineId;
       changed = true;
     }
-    if (settings.Platform !== platform) {
-      settings.Platform = platform;
+    if (appSettings.Platform !== platform) {
+      appSettings.Platform = platform;
       changed = true;
     }
     if (changed) {
-      await updateAppSettings(settings);
+      await updateAppSettings(appSettings);
       console.log("[License] MachineId/Platform atualizados nos settings.");
     }
+
+    const backupData = await getDatabaseBackup();
+    const payload = {
+      appSettings,
+      backupData,
+    };
 
     const response = await fetch(apiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(settings),
+      body: JSON.stringify(payload),
     });
     const result = await response.json();
     console.log("[License] Resposta da API de licença:", result);
@@ -74,26 +85,26 @@ export async function checkLicense(
 
     if (result.PlanStatus && result.PlanTier && result.LastCheckin) {
       let updated = false;
-      if (settings.PlanStatus !== result.PlanStatus) {
-        settings.PlanStatus = result.PlanStatus;
+      if (appSettings.PlanStatus !== result.PlanStatus) {
+        appSettings.PlanStatus = result.PlanStatus;
         updated = true;
       }
-      if (settings.PlanTier !== result.PlanTier) {
-        settings.PlanTier = result.PlanTier;
+      if (appSettings.PlanTier !== result.PlanTier) {
+        appSettings.PlanTier = result.PlanTier;
         updated = true;
       }
-      if (settings.LastCheckin !== result.LastCheckin) {
-        settings.LastCheckin = result.LastCheckin;
+      if (appSettings.LastCheckin !== result.LastCheckin) {
+        appSettings.LastCheckin = result.LastCheckin;
         updated = true;
       }
       if (updated) {
-        await updateAppSettings(settings);
+        await updateAppSettings(appSettings);
         console.log("[License] Settings atualizados com dados da licença.");
       }
     } else {
-      settings.PlanStatus = PlanStatus.Invalid;
-      settings.PlanTier = PlanTier.Basic;
-      await updateAppSettings(settings);
+      appSettings.PlanStatus = PlanStatus.Invalid;
+      appSettings.PlanTier = PlanTier.Basic;
+      await updateAppSettings(appSettings);
       console.error(
         "[License] Resposta da API não trouxe campos obrigatórios. Forçando status inválido no banco.",
         result
