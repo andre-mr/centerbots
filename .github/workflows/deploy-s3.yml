@@ -10,8 +10,13 @@ jobs:
   build-and-deploy:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        platform: [linux, win, mac]
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: win
+          - os: macos-latest
+            platform: mac
     runs-on: ${{ matrix.os }}
 
     steps:
