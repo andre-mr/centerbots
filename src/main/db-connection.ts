@@ -117,33 +117,37 @@ CREATE INDEX IF NOT EXISTS idx_message_bots_bot_id ON bot_messages(bot_id);
 
 const database = new sqlite3.Database(dbPath, (err) => {
   if (err) {
-    console.error("Erro ao conectar ao banco de dados:", err.message);
+    console.error("❌ Error connecting to the database!");
     throw err;
   }
 });
 
 export const dbReady: Promise<void> = new Promise((resolve, reject) => {
-  database.exec(schema, (err) => {
+  database.run("PRAGMA foreign_keys = ON", (err) => {
     if (err) {
-      console.error(
-        "❌ Erro ao configurar o esquema do banco de dados:",
-        err.message
-      );
+      console.error("❌ Error enabling foreign keys!");
       reject(err);
-    } else {
-      const initSql = `
-        INSERT OR IGNORE INTO app_config (id, license_key, dark_mode, user_id, plan_status, plan_tier, registered_bots, app_version, machine_id, last_ip, last_checkin, platform)
-        VALUES (1, NULL, 0, NULL, 'Invalid', 'Basic', '[]', '1.0.0', NULL, NULL, '${new Date().toISOString()}', NULL);
-      `;
-      database.run(initSql, (initErr) => {
-        if (initErr) {
-          console.error("❌ Erro ao inicializar app_config:", initErr.message);
-          reject(initErr);
-        } else {
-          resolve();
-        }
-      });
+      return;
     }
+    database.exec(schema, (err) => {
+      if (err) {
+        console.error("❌ Error configuring the database schema!");
+        reject(err);
+      } else {
+        const initSql = `
+          INSERT OR IGNORE INTO app_config (id, license_key, dark_mode, user_id, plan_status, plan_tier, registered_bots, app_version, machine_id, last_ip, last_checkin, platform)
+          VALUES (1, NULL, 0, NULL, 'Invalid', 'Basic', '[]', '1.0.0', NULL, NULL, '${new Date().toISOString()}', NULL);
+        `;
+        database.run(initSql, (initErr) => {
+          if (initErr) {
+            console.error("❌ Error initializing app_config!");
+            reject(initErr);
+          } else {
+            resolve();
+          }
+        });
+      }
+    });
   });
 });
 

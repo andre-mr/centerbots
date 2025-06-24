@@ -130,9 +130,17 @@ export function setupIpcHandlers() {
       const waManager = getWaManager();
       const botInstance = (waManager as any).bots?.get(botId);
       if (botInstance) {
-        botInstance.broadcastGroupJids = new Set(
-          groups.filter((g: any) => g.Broadcast).map((g: any) => g.GroupJid)
+        const allGroups = await getGroupsByBotId(botId);
+        const broadcastGroupJids = new Set(
+          groups
+            .filter((g: any) => g.Broadcast)
+            .map((g: any) => {
+              const found = allGroups.find((ag) => ag.Id === g.GroupId);
+              return found?.GroupJid;
+            })
+            .filter(Boolean)
         );
+        botInstance.broadcastGroupJids = broadcastGroupJids;
       }
       return;
     }

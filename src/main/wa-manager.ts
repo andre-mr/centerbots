@@ -49,6 +49,8 @@ type BotInstance = {
   groupMetadataCache?: Record<string, any>;
   lastGroupFetch?: number;
   broadcastGroupJids?: Set<string>;
+  isRenaming?: boolean;
+  newWaNumber?: string;
 };
 
 type BotQueueState = {
@@ -168,7 +170,7 @@ export class WaManager {
       version,
       auth: state,
       printQRInTerminal: false,
-      logger: pino({ level: "error" }),
+      logger: pino({ level: "silent" }),
       cachedGroupMetadata: async (jid) => {
         return botInstance?.groupMetadataCache?.[jid];
       },
@@ -218,8 +220,44 @@ export class WaManager {
       }
 
       if (connection === "close") {
-        const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
         const instance = this.bots.get(bot.Id);
+
+        if (instance?.isRenaming && instance.newWaNumber) {
+          instance.isRenaming = false;
+          const oldWaNumber = bot.WaNumber;
+          const newWaNumber = instance.newWaNumber;
+          instance.newWaNumber = undefined;
+
+          const oldAuthDir = path.join(
+            app.getPath("userData"),
+            "auth",
+            oldWaNumber
+          );
+          const newAuthDir = path.join(
+            app.getPath("userData"),
+            "auth",
+            newWaNumber
+          );
+
+          try {
+            if (fs.existsSync(oldAuthDir) && !fs.existsSync(newAuthDir)) {
+              await fsp.rename(oldAuthDir, newAuthDir);
+            }
+            bot.WaNumber = newWaNumber;
+            instance.bot.WaNumber = newWaNumber;
+            await updateBot(bot);
+            this.mainWindow.webContents.send("bot:statusUpdate", bot);
+          } catch (err) {
+            console.error(
+              "❌ Failed to rename auth sub-directory. Restarting bot with old information."
+            );
+          }
+
+          this.startBot(bot);
+          return;
+        }
+
+        const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
         if (statusCode === DisconnectReason.loggedOut) {
           const fs = require("fs");
           const rimraf = require("rimraf");
@@ -228,7 +266,7 @@ export class WaManager {
               rimraf.sync(authDir);
             }
           } catch (err) {
-            console.error("Erro ao remover diretório de autenticação:", err);
+            console.error("❌ Error removing authentication directory!");
           }
           bot.Status = Status.LoggedOut;
           await updateBot(bot);
@@ -247,37 +285,21 @@ export class WaManager {
     });
 
     sock.ev.on("creds.update", async () => {
-      const userNumber = sock.user?.id?.match(/^\d+/)?.[0];
-      if (userNumber && bot.WaNumber !== userNumber) {
-        const oldAuthDir = path.join(
-          app.getPath("userData"),
-          "auth",
-          bot.WaNumber
-        );
-        const newAuthDir = path.join(
-          app.getPath("userData"),
-          "auth",
-          userNumber
-        );
-
-        if (bot.WaNumber !== userNumber) {
-          try {
-            if (fs.existsSync(oldAuthDir) && !fs.existsSync(newAuthDir)) {
-              await fsp.rename(oldAuthDir, newAuthDir);
-            }
-          } catch (err) {
-            console.error("Erro ao renomear pasta de autenticação:", err);
-          }
-          bot.WaNumber = userNumber;
-          await updateBot(bot);
-          const instance = this.bots.get(bot.Id);
-          if (instance) {
-            instance.bot.WaNumber = userNumber;
-          }
-          this.mainWindow.webContents.send("bot:statusUpdate", bot);
-        }
-      }
       await saveCreds();
+
+      const userNumber = sock.user?.id?.match(/^\d+/)?.[0];
+      const instance = this.bots.get(bot.Id);
+
+      if (
+        userNumber &&
+        bot.WaNumber !== userNumber &&
+        instance &&
+        !instance.isRenaming
+      ) {
+        instance.isRenaming = true;
+        instance.newWaNumber = userNumber;
+        sock.end(undefined);
+      }
     });
 
     /** MESSAGES MANAGEMENT **/
@@ -294,6 +316,20 @@ export class WaManager {
                 msg.key.participant?.endsWith("s.whatsapp.net")
               ? msg.key.participant
               : "";
+
+        setTimeout(
+          () => {
+            sock.readMessages([
+              {
+                remoteJid: msg.key.remoteJid,
+                id: msg.key.id,
+                participant:
+                  msg?.participant || msg?.key?.participant || undefined,
+              },
+            ]);
+          },
+          Math.floor(Math.random() * 1000) + 1000
+        );
 
         if (
           msg.key.fromMe ||
@@ -314,6 +350,23 @@ export class WaManager {
           msg?.message?.videoMessage?.caption ||
           msg?.message?.ephemeralMessage?.message?.imageMessage?.caption ||
           msg?.message?.ephemeralMessage?.message?.videoMessage?.caption;
+
+        if (
+          typeof content === "string" &&
+          content.trim().toLowerCase() === "status" &&
+          msg.key?.remoteJid?.endsWith("s.whatsapp.net")
+        ) {
+          const replyMessage =
+            `${bot.Status === Status.Online ? "🟢" : bot.Status === Status.Sending ? "🟡" : "⚪"} ` +
+            `Bot está ${Status[bot.Status] || "indefinido"}\n${botInstance?.messageQueue.length ?? 0} mensagens na fila`;
+          setTimeout(
+            () => {
+              sock.sendMessage(sender, { text: replyMessage }, { quoted: msg });
+            },
+            Math.floor(Math.random() * 1000) + 1000
+          );
+          continue;
+        }
 
         if (!content) continue;
 
@@ -346,20 +399,6 @@ export class WaManager {
           botId: bot.Id,
           messageQueue: botInstance?.messageQueue || [],
         });
-
-        setTimeout(
-          () => {
-            sock.readMessages([
-              {
-                remoteJid: msg.key.remoteJid,
-                id: msg.key.id,
-                participant:
-                  msg?.participant || msg?.key?.participant || undefined,
-              },
-            ]);
-          },
-          Math.floor(Math.random() * 1000) + 1000
-        );
       }
     });
 
@@ -497,12 +536,12 @@ export class WaManager {
           }
           await sendMessageToGroup(instance, message, groupJid);
         } catch (err) {
-          console.error(`Erro ao enviar mensagem para grupo ${groupJid}:`, err);
+          console.error(`❌ Error sending message to group ${groupJid}!`);
         }
         state.currentGroupIndex++;
 
         if (state.currentGroupIndex < groupIds.length && !state.paused) {
-          await delay((instance.bot.DelayBetweenGroups || 1) * 1000, 1000);
+          await delay((instance.bot.DelayBetweenGroups ?? 0) * 1000, 1000);
         }
         if (state.paused) break;
       }
@@ -519,7 +558,7 @@ export class WaManager {
           messageQueue: instance.messageQueue.slice(state.currentMessageIndex),
         });
         if (state.currentMessageIndex < instance.messageQueue.length) {
-          await delay((instance.bot.DelayBetweenMessages || 1) * 1000, 1000);
+          await delay((instance.bot.DelayBetweenMessages ?? 0) * 1000, 1000);
         }
       }
     }
@@ -560,6 +599,12 @@ export class WaManager {
     const prevStatus = instance.bot.Status;
 
     Object.assign(instance.bot, patch);
+
+    if (patch.AuthorizedNumbers) {
+      instance.authorizedNumbers = patch.AuthorizedNumbers.map(
+        (num) => new AuthorizedNumber(botId, num)
+      );
+    }
 
     if (typeof patch.Active === "undefined") instance.bot.Active = prevActive;
     if (typeof patch.Paused === "undefined") instance.bot.Paused = prevPaused;
@@ -653,7 +698,7 @@ export class WaManager {
 
       return { processedBuffer, processedBufferBase64 };
     } catch (err) {
-      console.error("Erro ao obter ou processar imagem da URL:", err);
+      console.error("❌ Error fetching or processing image from URL!");
       return null;
     }
   }
@@ -692,13 +737,19 @@ function addUtmParamsToLinks(
 }
 
 async function delay(base: number, randomRange?: number): Promise<void> {
-  const minBase = Math.max(1000, base);
-  let ms = minBase;
+  const safeBase = Math.max(0, base);
+  if (safeBase === 0) {
+    return;
+  }
+
+  let ms = safeBase;
   if (randomRange !== undefined) {
     const safeRange = Math.max(0, randomRange);
-    ms = minBase + Math.floor(Math.random() * (safeRange * 2 + 1));
+    const randomPart = Math.random() * safeRange * 2 - safeRange;
+    ms = safeBase + randomPart;
   }
-  await new Promise((res) => setTimeout(res, ms));
+
+  await new Promise((res) => setTimeout(res, Math.floor(Math.max(0, ms))));
 }
 
 async function sendMessageToGroup(
@@ -735,24 +786,60 @@ async function sendMessageToGroup(
     }
   }
 
-  if (message.Image) {
+  const ephemeralDuration =
+    instance.groupMetadataCache?.[groupJid]?.ephemeralDuration;
+
+  const sendEphemeral = async (msg: any, opts?: any) => {
     await instance.socket?.sendMessage(groupJid, {
-      image: message.Image,
-      caption: contentToSend,
-      mimetype: "image/jpeg",
-      jpegThumbnail:
-        message.ImageThumbnailBase64 || message.Image.toString("base64"),
+      disappearingMessagesInChat: ephemeralDuration,
     });
-  } else if (
-    message.WaMessage &&
-    (instance.bot.SendMethod == SendMethods.Forward || isMedia)
-  ) {
-    await instance.socket?.sendMessage(groupJid, {
-      forward: message.WaMessage,
+    return instance.socket?.sendMessage(groupJid, msg, {
+      ...(opts || {}),
+      ephemeralExpiration: ephemeralDuration,
     });
+  };
+
+  if (ephemeralDuration && ephemeralDuration > 0) {
+    if (message.Image) {
+      return sendEphemeral({
+        image: message.Image,
+        caption: contentToSend,
+        mimetype: "image/jpeg",
+        jpegThumbnail:
+          message.ImageThumbnailBase64 || message.Image.toString("base64"),
+      });
+    } else if (
+      message.WaMessage &&
+      (instance.bot.SendMethod == SendMethods.Forward || isMedia)
+    ) {
+      return sendEphemeral({
+        forward: message.WaMessage,
+      });
+    } else {
+      return sendEphemeral({
+        text: contentToSend,
+      });
+    }
   } else {
-    await instance.socket?.sendMessage(groupJid, {
-      text: contentToSend,
-    });
+    if (message.Image) {
+      return instance.socket?.sendMessage(groupJid, {
+        image: message.Image,
+        caption: contentToSend,
+        mimetype: "image/jpeg",
+        jpegThumbnail:
+          message.ImageThumbnailBase64 || message.Image.toString("base64"),
+      });
+    } else if (
+      message.WaMessage &&
+      (instance.bot.SendMethod == SendMethods.Forward || isMedia)
+    ) {
+      return instance.socket?.sendMessage(groupJid, {
+        forward: message.WaMessage,
+      });
+    } else {
+      return instance.socket?.sendMessage(groupJid, {
+        text: contentToSend,
+      });
+    }
   }
 }

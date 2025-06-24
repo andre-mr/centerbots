@@ -113,6 +113,7 @@ const BotDetailsPage: React.FC<BotDetailsProps> = ({
   );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   useEffect(() => {
     setFormData(bot);
@@ -182,23 +183,18 @@ const BotDetailsPage: React.FC<BotDetailsProps> = ({
   };
 
   const handleDelete = async () => {
-    if (
-      window.confirm(
-        `Tem certeza que deseja excluir o bot "${formData.Campaign || formData.WaNumber}"?`
-      )
-    ) {
-      setIsLoading(true);
-      setError(null);
-      try {
-        await window.appApi.deleteBot(formData.Id);
-        onCancel();
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Ocorreu um erro ao excluir"
-        );
-      } finally {
-        setIsLoading(false);
-      }
+    setIsLoading(true);
+    setError(null);
+    try {
+      await window.appApi.deleteBot(formData.Id);
+      onCancel();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Ocorreu um erro ao excluir"
+      );
+    } finally {
+      setIsLoading(false);
+      setShowDeleteModal(false);
     }
   };
 
@@ -238,7 +234,7 @@ const BotDetailsPage: React.FC<BotDetailsProps> = ({
               name="WaNumber"
               type="text"
               className="rounded border bg-white px-2 py-2 font-bold text-whatsapp-teal dark:bg-gray-800 dark:text-gray-100"
-              placeholder="Ex: 553499991111"
+              placeholder="Ex: 553499991111 (opcional, atribuído automaticamente)"
               value={formData.WaNumber}
               onChange={handleChange}
             />
@@ -372,7 +368,7 @@ const BotDetailsPage: React.FC<BotDetailsProps> = ({
           {!isNew && (
             <button
               className="rounded-full bg-red-400 px-4 py-2 text-white hover:bg-red-500 dark:bg-red-600 dark:hover:bg-red-700"
-              onClick={handleDelete}
+              onClick={() => setShowDeleteModal(true)}
               disabled={isLoading}
             >
               Excluir
@@ -396,6 +392,39 @@ const BotDetailsPage: React.FC<BotDetailsProps> = ({
           </button>
         </div>
       </div>
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="rounded bg-white p-6 shadow-lg dark:bg-gray-800">
+            <h2 className="mb-4 text-xl font-bold">Confirmar exclusão</h2>
+            <p className="mb-2">
+              Tem certeza que deseja excluir o bot{" "}
+              <span className="font-semibold">
+                "{formData.Campaign || formData.WaNumber}"
+              </span>
+              ?
+            </p>
+            <p className="mb-6 text-red-600 dark:text-red-400">
+              Esta ação não poderá ser desfeita!
+            </p>
+            <div className="flex justify-between gap-2">
+              <button
+                className="rounded bg-gray-200 px-4 py-2"
+                onClick={() => setShowDeleteModal(false)}
+                disabled={isLoading}
+              >
+                Cancelar
+              </button>
+              <button
+                className="rounded bg-red-500 px-4 py-2 text-white"
+                onClick={handleDelete}
+                disabled={isLoading}
+              >
+                Confirmar exclusão
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

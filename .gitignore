@@ -6,5 +6,5 @@ out
 *.log*
 .vscode
 dev
-.env
+.env*
 package-lock.json

@@ -137,6 +137,27 @@ Para gerenciar múltiplos bots no mesmo processo, recomenda-se:
 
 Resumidamente, a biblioteca suporta múltiplos bots facilmente, desde que gerenciemos separadamente o estado de cada conexão. O isolamento de credenciais e de tratadores de eventos são os pontos-chave para uma operação correta de vários bots dentro da mesma aplicação.
 
+## Proxy
+
+Exemplo de uso de proxy na conexão:
+
+```
+import https from 'https';
+import { HttpsProxyAgent } from 'https-proxy-agent';
+import makeWASocket from 'baileys'
+import P from 'pino'
+
+const proxyUrl = 'http://user:password@proxy.exemple.com:3128';
+const proxyAgent = new HttpsProxyAgent(proxyUrl);
+
+const sock = makeWASocket({
+  auth: any, // auth state of your choosing,
+  logger: P(), // you can configure this as much as you want, even including streaming the logs to a ReadableStream for upload or saving to a file
+  agent: proxyAgent,
+  fetchAgent: proxyAgent,
+})
+```
+
 ## Envio de Mídia
 
 Enviar mídia (imagens, vídeos, áudio, documentos, etc.) com Baileys é tão simples quanto enviar texto – basta fornecer o conteúdo de mídia na chamada `sendMessage` que a biblioteca cuida do restante. Baileys faz o upload do arquivo para os servidores do WhatsApp e envia a mensagem com os metadados necessários. Internamente, ele obtém um **media connection** (endereço de upload) válido e utiliza a API do WhatsApp para armazenar o arquivo na nuvem antes do envio.

@@ -71,7 +71,6 @@ const exposedApi = {
 
   onLicenseInvalid: (callback: () => void) => {
     const handler = () => {
-      console.log("[Preload] Evento license:invalid recebido");
       callback();
     };
     ipcRenderer.on("license:invalid", handler);
@@ -79,7 +78,6 @@ const exposedApi = {
   },
   onLicenseGrace: (callback: () => void) => {
     const handler = () => {
-      console.log("[Preload] Evento license:grace recebido");
       callback();
     };
     ipcRenderer.on("license:grace", handler);
@@ -87,7 +85,6 @@ const exposedApi = {
   },
   onLicenseValid: (callback: () => void) => {
     const handler = () => {
-      console.log("[Preload] Evento license:valid recebido");
       callback();
     };
     ipcRenderer.on("license:valid", handler);
@@ -100,7 +97,9 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld("electron", electronAPI);
     contextBridge.exposeInMainWorld("appApi", exposedApi);
   } catch (error) {
-    console.error(error);
+    console.error(
+      "❌ An error occurred while exposing APIs in the isolated context."
+    );
   }
 } else {
   (window as any).electron = electronAPI;

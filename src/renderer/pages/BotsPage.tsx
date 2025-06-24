@@ -129,19 +129,21 @@ const BotsPage: React.FC<BotsProps> = ({
   };
 
   const handleActivateAll = async () => {
-    await Promise.all(
-      bots
-        .filter((bot) => !bot.Active)
-        .map((bot) => handleUpdateActive(bot, true))
-    );
+    const inactiveBots = bots.filter((bot) => !bot.Active);
+
+    for (const bot of inactiveBots) {
+      await handleUpdateActive(bot, true);
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
   };
 
   const handleDeactivateAll = async () => {
-    await Promise.all(
-      bots
-        .filter((bot) => bot.Active)
-        .map((bot) => handleUpdateActive(bot, false))
-    );
+    const activeBots = bots.filter((bot) => bot.Active);
+
+    for (const bot of activeBots) {
+      await handleUpdateActive(bot, false);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
   };
 
   return (

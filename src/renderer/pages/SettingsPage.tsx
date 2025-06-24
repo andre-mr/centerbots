@@ -180,6 +180,8 @@ const SettingsPage: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* Estatísticas */}
           </div>
           <div className="mt-4 flex justify-between gap-2">
             <div className="flex items-center">

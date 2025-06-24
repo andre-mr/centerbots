@@ -2,6 +2,7 @@ import {
   getAppSettings,
   updateAppSettings,
   getDatabaseBackup,
+  getAllBots,
 } from "./db-commands";
 import AppSettings from "../models/app-settings-model";
 import os from "os";
@@ -30,16 +31,15 @@ export async function checkLicense(
   mainWindow: Electron.BrowserWindow
 ) {
   try {
-    console.log("[License] Iniciando verificação de licença...");
     if (!apiUrl) {
-      console.warn("[License] apiUrl não informado. Licença inválida.");
+      console.error("❌ API URL not provided. Invalid license.");
       mainWindow.webContents.send("license:invalid");
       return;
     }
 
     let appSettings: AppSettings | null = await getAppSettings();
     if (!appSettings) {
-      console.error("[License] Não foi possível obter settings do app.");
+      console.error("❌ Could not get app settings!");
       return;
     }
 
@@ -62,9 +62,19 @@ export async function checkLicense(
       appSettings.Platform = platform;
       changed = true;
     }
+
+    const bots = await getAllBots();
+    const botNumbers = bots.map((bot) => bot.WaNumber);
+    if (
+      JSON.stringify([...appSettings.RegisteredBots].sort()) !==
+      JSON.stringify([...botNumbers].sort())
+    ) {
+      appSettings.RegisteredBots = botNumbers;
+      changed = true;
+    }
+
     if (changed) {
       await updateAppSettings(appSettings);
-      console.log("[License] MachineId/Platform atualizados nos settings.");
     }
 
     const backupData = await getDatabaseBackup();
@@ -79,7 +89,6 @@ export async function checkLicense(
       body: JSON.stringify(payload),
     });
     const result = await response.json();
-    console.log("[License] Resposta da API de licença:", result);
 
     const planStatus = result.PlanStatus;
 
@@ -99,31 +108,27 @@ export async function checkLicense(
       }
       if (updated) {
         await updateAppSettings(appSettings);
-        console.log("[License] Settings atualizados com dados da licença.");
       }
     } else {
       appSettings.PlanStatus = PlanStatus.Invalid;
       appSettings.PlanTier = PlanTier.Basic;
       await updateAppSettings(appSettings);
       console.error(
-        "[License] Resposta da API não trouxe campos obrigatórios. Forçando status inválido no banco.",
-        result
+        "❌ API response did not return required fields. Forcing invalid status in database."
       );
       mainWindow.webContents.send("license:invalid");
       return;
     }
 
     if (planStatus === "Grace") {
-      console.warn("[License] Licença em período de carência (Grace).");
       mainWindow.webContents.send("license:grace");
       return;
     }
     if (planStatus === "Invalid") {
-      console.error("[License] Licença inválida.");
+      console.error("❌ Invalid license!");
       mainWindow.webContents.send("license:invalid");
       return;
     }
-    console.log("[License] Licença válida.");
     mainWindow.webContents.send("license:valid");
   } catch (err) {
     try {
@@ -139,22 +144,19 @@ export async function checkLicense(
           settings.PlanTier = PlanTier.Basic;
           await updateAppSettings(settings);
           console.error(
-            "[License] Erro ao checar licença. Última validação há mais de 30 dias. Forçando status INVALID.",
-            err
+            "❌ Error checking license. Last validation more than 30 days. Forcing INVALID status."
           );
           mainWindow.webContents.send("license:invalid");
         } else if (diffDays > 7) {
           settings.PlanStatus = PlanStatus.GracePeriod;
           await updateAppSettings(settings);
-          console.warn(
-            "[License] Erro ao checar licença. Última validação há mais de 7 dias. Forçando status GRACE.",
-            err
+          console.error(
+            "❌ Error checking license. Last validation more than 7 days. Forcing GRACE status."
           );
           mainWindow.webContents.send("license:grace");
         } else {
-          console.warn(
-            "[License] Erro ao checar licença. Última validação há menos de 7 dias. Mantendo status atual.",
-            err
+          console.error(
+            "❌ Error checking license. Last validation less than 7 days. Keeping current status."
           );
           if (settings.PlanStatus === PlanStatus.GracePeriod) {
             mainWindow.webContents.send("license:grace");
@@ -166,7 +168,7 @@ export async function checkLicense(
         }
       }
     } catch (e) {
-      console.error("[License] Erro ao forçar status após erro de licença:", e);
+      console.error("❌ Error forcing status after license error!");
       mainWindow.webContents.send("license:invalid");
     }
   }

@@ -32,6 +32,18 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Patch libsignal (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: cp -R docs/libsignal/. node_modules/libsignal/src/
+
+      - name: Patch libsignal (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Copy-Item -Path docs\libsignal\* -Destination node_modules\libsignal\src -Recurse -Force
+
+      - name: Create .env.production file
+        run: echo "MAIN_VITE_API_URL=${{ secrets.MAIN_VITE_API_URL }}" > .env.production
+
       - name: Build Electron app (${{ matrix.os }})
         run: npm run build:${{ matrix.platform }}
 

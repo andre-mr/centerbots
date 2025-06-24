@@ -14,7 +14,7 @@ import {
 } from "../models/bot-options-model";
 import { useSettings } from "./contexts/SettingsContext";
 import BotMessagesPage from "./pages/BotMessagesPage";
-import { PlanStatus } from "../models/app-settings-options-model"; // adicione se não tiver
+import { PlanStatus } from "../models/app-settings-options-model";
 
 const App: React.FC = () => {
   const [activeSection, setActiveSection] = useState("bots");
@@ -172,7 +172,6 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const removeInvalid = window.appApi.onLicenseInvalid(() => {
-      console.log("[App] Evento de licença inválida recebido");
       setActiveSection("settings");
       setShowBotDetails(false);
       setShowBotGroups(false);
@@ -180,12 +179,10 @@ const App: React.FC = () => {
       refreshSettings();
     });
     const removeGrace = window.appApi.onLicenseGrace(() => {
-      console.log("[App] Evento de licença em carência (grace) recebido");
-      setActiveSection("settings"); // SEM graceHandled!
+      setActiveSection("settings");
       refreshSettings();
     });
     const removeValid = window.appApi.onLicenseValid(() => {
-      console.log("[App] Evento de licença válida recebido");
       refreshSettings();
       setActiveSection("bots");
     });

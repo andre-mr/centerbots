@@ -1,4 +1,3 @@
-import "dotenv/config";
 import { app, shell, BrowserWindow } from "electron";
 import { join } from "path";
 import { electronApp, is } from "@electron-toolkit/utils";
@@ -83,46 +82,58 @@ function setupAutoUpdater(win: BrowserWindow) {
   });
 }
 
-app.whenReady().then(async () => {
-  electronApp.setAppUserModelId("com.electron");
+const gotTheLock = app.requestSingleInstanceLock();
 
-  mainWindow = createWindow();
-
-  checkLicense(process.env.API_URL || "", mainWindow!);
-
-  try {
-    const purged = await purgeOldMessages(30);
-    if (purged > 0) {
-      console.log(`Expurgadas ${purged} mensagens antigas do banco de dados.`);
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on("second-instance", (_event, _commandLine, _workingDirectory) => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
     }
-  } catch (err) {
-    console.error("Erro ao expurgar mensagens antigas:", err);
-  }
-
-  const waManager = getWaManager(mainWindow);
-
-  mainWindow.webContents.once("did-finish-load", () => {
-    waManager.init();
   });
 
-  setupAutoUpdater(mainWindow);
+  app.whenReady().then(async () => {
+    electronApp.setAppUserModelId("com.electron");
 
-  cron.schedule("0 1 * * *", async () => {
+    mainWindow = createWindow();
+
+    checkLicense(import.meta.env.MAIN_VITE_API_URL || "", mainWindow!);
+
     try {
-      await checkLicense(process.env.API_URL || "", mainWindow!);
-      console.log("Licença verificada com sucesso às 1h.");
+      await purgeOldMessages(30);
     } catch (err) {
-      console.error("Erro ao verificar licença:", err);
+      console.error("❌ Error purging old messages!");
+    }
+
+    const waManager = getWaManager(mainWindow);
+
+    mainWindow.webContents.once("did-finish-load", () => {
+      waManager.init();
+    });
+
+    setupAutoUpdater(mainWindow);
+
+    cron.schedule("0 1 * * *", async () => {
+      try {
+        await checkLicense(
+          import.meta.env.MAIN_VITE_API_URL || "",
+          mainWindow!
+        );
+      } catch (err) {
+        console.error("❌ Error checking license!");
+      }
+    });
+
+    app.on("activate", function () {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+  });
+
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") {
+      app.quit();
     }
   });
-
-  app.on("activate", function () {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
-});
-
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
-  }
-});
+}
