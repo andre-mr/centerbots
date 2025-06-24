@@ -511,9 +511,9 @@ export async function createBot(bot: Bot): Promise<number> {
   const sql = `
     INSERT INTO bots (
       wa_number, campaign, whatsapp_sources, send_method, delay_between_groups, 
-      delay_between_messages, link_parameters, updated
+      delay_between_messages, link_parameters, updated, proxy
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
   const { lastID } = await run(sql, [
     bot.WaNumber || null,
@@ -524,6 +524,7 @@ export async function createBot(bot: Bot): Promise<number> {
     bot.DelayBetweenMessages,
     bot.LinkParameters,
     new Date().toISOString(),
+    bot.Proxy || null,
   ]);
   if (bot.AuthorizedNumbers) {
     await syncAuthorizedNumbers(lastID, bot.AuthorizedNumbers);
@@ -541,7 +542,8 @@ export async function updateBot(bot: Bot): Promise<void> {
            delay_between_groups = ?,
            delay_between_messages = ?,
            link_parameters = ?,
-           updated = ?
+           updated = ?,
+           proxy = ?
      WHERE id = ?
   `;
   await run(sql, [
@@ -553,6 +555,7 @@ export async function updateBot(bot: Bot): Promise<void> {
     bot.DelayBetweenMessages,
     bot.LinkParameters,
     new Date().toISOString(),
+    bot.Proxy || null,
     bot.Id,
   ]);
   if (bot.AuthorizedNumbers) {
@@ -577,6 +580,7 @@ export async function getBotById(id: number): Promise<Bot | null> {
       b.delay_between_messages,
       b.link_parameters,
       b.updated,
+      b.proxy,
       COALESCE(bg.count_groups, 0) AS total_groups,
       GROUP_CONCAT(an.wa_number) AS authorized_numbers
     FROM bots AS b
@@ -599,6 +603,7 @@ export async function getBotById(id: number): Promise<Bot | null> {
     delay_between_messages: number;
     link_parameters: string | null;
     updated: string;
+    proxy: string | null;
     total_groups: number;
     authorized_numbers: string | null;
   }>(sql, [id]);
@@ -616,6 +621,7 @@ export async function getBotById(id: number): Promise<Bot | null> {
         row.delay_between_messages,
         row.link_parameters as LinkParameters,
         row.updated,
+        row.proxy,
         false,
         authorizedNumbers,
         false,
@@ -637,6 +643,7 @@ export async function getAllBots(): Promise<Bot[]> {
       b.delay_between_messages,
       b.link_parameters,
       b.updated,
+      b.proxy,
       COALESCE(bg.count_groups, 0) AS total_groups,
       GROUP_CONCAT(an.wa_number) AS authorized_numbers
     FROM bots AS b
@@ -658,6 +665,7 @@ export async function getAllBots(): Promise<Bot[]> {
     delay_between_messages: number;
     link_parameters: string | null;
     updated: string;
+    proxy: string | null;
     total_groups: number;
     authorized_numbers: string | null;
   }>(sql);
@@ -675,6 +683,7 @@ export async function getAllBots(): Promise<Bot[]> {
       row.delay_between_messages,
       row.link_parameters as LinkParameters,
       row.updated,
+      row.proxy,
       false,
       authorizedNumbers,
       false,

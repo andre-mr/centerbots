@@ -98,6 +98,9 @@ const HelpPage: React.FC = () => {
             Fila de envio com controle para reordenar ou excluir mensagens.
           </li>
           <li>Visualização de status de envio em tempo real.</li>
+          <li>
+            Proxy opcional para conexão com os servidores da meta por outro IP.
+          </li>
         </ul>
       </section>
 
@@ -125,14 +128,15 @@ const HelpPage: React.FC = () => {
           <li className="flex items-center gap-2">
             <MdHighlightOff className="text-2xl text-yellow-500 dark:text-yellow-400" />
             <span>
-              <b>Desconectado:</b> O bot perdeu a conexão com o WhatsApp.
+              <b>Desconectado:</b> O bot perdeu a conexão com o WhatsApp e está
+              tentando se reconectar.
             </span>
           </li>
           <li className="flex items-center gap-2">
             <MdError className="animate-pulse text-2xl text-red-500 dark:text-red-400" />
             <span>
-              <b>Deslogado:</b> O bot foi desconectado e precisa ser configurado
-              novamente.
+              <b>Deslogado:</b> O bot foi desconectado da conta e precisa ser
+              autorizado novamente por QR Code.
             </span>
           </li>
           <li className="flex items-center gap-2">

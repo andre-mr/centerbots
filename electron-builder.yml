@@ -1,5 +1,5 @@
-appId: com.electron.app
-productName: centerbots
+appId: com.centerpromos.centerbots
+productName: CenterBots
 directories:
   buildResources: build
 files:

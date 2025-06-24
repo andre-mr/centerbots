@@ -17,7 +17,7 @@ export class Bot {
     public DelayBetweenMessages: number,
     public LinkParameters: LinkParameters,
     public Updated: string,
-
+    public Proxy: string | null,
     public Active: boolean, // in-memory, not stored in DB
     public AuthorizedNumbers: string[], // in-memory, not stored in DB
     public Paused: boolean, // in-memory, not stored in DB

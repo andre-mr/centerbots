@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS bots (
     delay_between_groups    INTEGER NOT NULL DEFAULT 2,   -- in seconds
     delay_between_messages  INTEGER NOT NULL DEFAULT 10,  -- in seconds
     link_parameters         TEXT    NOT NULL,             -- Link parameters (LinkParameters: 'all', 'source', 'medium', 'none')
-    updated                 TEXT    NOT NULL              -- ISO datetime
+    updated                 TEXT    NOT NULL,             -- ISO datetime
+    proxy                   TEXT                          -- Proxy URL (opcional)
 );
 
 -- Groups

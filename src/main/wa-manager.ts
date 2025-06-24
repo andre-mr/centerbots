@@ -38,19 +38,21 @@ import fs from "fs";
 import fsp from "fs/promises";
 import metadata from "url-metadata";
 import sharp from "sharp";
+import { HttpsProxyAgent } from "https-proxy-agent";
 
 type BotInstance = {
   bot: Bot;
   socket: ReturnType<typeof makeWASocket> | null;
   messageQueue: Message[];
   stop: (() => Promise<void>) | null;
-  manualDisconnect?: boolean;
+  manualDisconnect: boolean;
   authorizedNumbers: AuthorizedNumber[];
-  groupMetadataCache?: Record<string, any>;
-  lastGroupFetch?: number;
-  broadcastGroupJids?: Set<string>;
-  isRenaming?: boolean;
-  newWaNumber?: string;
+  groupMetadataCache: Record<string, any> | null;
+  lastGroupFetch: number | null;
+  broadcastGroupJids: Set<string> | null;
+  isRenaming: boolean;
+  newWaNumber: string | null;
+  reconnectAttempts: number;
 };
 
 type BotQueueState = {
@@ -79,6 +81,13 @@ export class WaManager {
         messageQueue: [],
         stop: null,
         authorizedNumbers,
+        manualDisconnect: false,
+        groupMetadataCache: null,
+        lastGroupFetch: null,
+        broadcastGroupJids: null,
+        isRenaming: false,
+        newWaNumber: null,
+        reconnectAttempts: 0,
       });
     } else {
       const instance = this.bots.get(bot.Id)!;
@@ -166,6 +175,13 @@ export class WaManager {
 
     const botInstance = this.bots.get(bot.Id);
 
+    if (botInstance) botInstance.reconnectAttempts = 0;
+
+    let proxyAgent: HttpsProxyAgent<string> | null = null;
+    if (bot.Proxy) {
+      proxyAgent = new HttpsProxyAgent(bot.Proxy);
+    }
+
     const sock = makeWASocket({
       version,
       auth: state,
@@ -175,6 +191,7 @@ export class WaManager {
         return botInstance?.groupMetadataCache?.[jid];
       },
       generateHighQualityLinkPreview: false,
+      ...(proxyAgent ? { agent: proxyAgent, fetchAgent: proxyAgent } : {}),
     });
 
     sock.ev.on("connection.update", async (update) => {
@@ -194,6 +211,8 @@ export class WaManager {
         bot.Status = Status.Online;
         await updateBot(bot);
         this.mainWindow.webContents.send("bot:statusUpdate", bot);
+
+        if (botInstance) botInstance.reconnectAttempts = 0;
 
         const now = Date.now();
         if (
@@ -226,7 +245,7 @@ export class WaManager {
           instance.isRenaming = false;
           const oldWaNumber = bot.WaNumber;
           const newWaNumber = instance.newWaNumber;
-          instance.newWaNumber = undefined;
+          instance.newWaNumber = null;
 
           const oldAuthDir = path.join(
             app.getPath("userData"),
@@ -276,8 +295,20 @@ export class WaManager {
           bot.Status = Status.Disconnected;
           await updateBot(bot);
           this.mainWindow.webContents.send("bot:statusUpdate", bot);
+
           if (shouldReconnect && !instance?.manualDisconnect) {
-            this.startBot(bot);
+            if (instance) {
+              instance.reconnectAttempts++;
+              if (instance.reconnectAttempts <= 5) {
+                this.startBot(bot);
+              } else {
+                setTimeout(() => {
+                  this.startBot(bot);
+                }, 60000);
+              }
+            } else {
+              this.startBot(bot);
+            }
           }
           if (instance) instance.manualDisconnect = false;
         }
@@ -408,9 +439,6 @@ export class WaManager {
         groups.filter((g) => g.Broadcast).map((g) => g.GroupJid)
       );
       botInstance.broadcastGroupJids = broadcastGroupJids;
-    }
-
-    if (botInstance) {
       botInstance.bot = bot;
       botInstance.socket = sock;
       botInstance.stop = async () => {
@@ -426,6 +454,13 @@ export class WaManager {
           sock.end(undefined);
         },
         authorizedNumbers,
+        manualDisconnect: false,
+        groupMetadataCache: null,
+        lastGroupFetch: null,
+        broadcastGroupJids: null,
+        isRenaming: false,
+        newWaNumber: null,
+        reconnectAttempts: 0,
       });
     }
 

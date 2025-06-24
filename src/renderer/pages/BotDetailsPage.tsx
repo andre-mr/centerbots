@@ -361,6 +361,23 @@ const BotDetailsPage: React.FC<BotDetailsProps> = ({
               {enumToOptions(LinkParameters, linkParametersTranslations)}
             </select>
           </div>
+          <div className="flex flex-col gap-1">
+            <label
+              className="font-semibold text-gray-700 dark:text-gray-200"
+              htmlFor="proxy"
+            >
+              Proxy (opcional)
+            </label>
+            <input
+              id="proxy"
+              name="Proxy"
+              type="text"
+              className="rounded border bg-white px-2 py-2 dark:bg-gray-800 dark:text-gray-100"
+              placeholder="Ex: https://user:password@br.decodo.com:10000"
+              value={formData.Proxy || ""}
+              onChange={handleChange}
+            />
+          </div>
         </form>
       </div>
       <div className="flex justify-between gap-2">
