@@ -33,8 +33,6 @@ dmg:
 linux:
   icon: resources/icon.png
   target:
-    - AppImage
-    - snap
     - deb
   maintainer: electronjs.org
   category: Utility
