@@ -11,6 +11,7 @@ import {
   getBotGroupsByBotId,
   updateBotGroupsBroadcast,
   getBotById,
+  getGlobalStats,
 } from "./db-commands";
 import { Bot } from "../models/bot-model";
 import { getWaManager } from "./wa-manager";
@@ -98,6 +99,30 @@ export function setupIpcHandlers() {
   ipcMain.handle("bots:getGroupsAndMembersStats", async (_event, botId) => {
     if (!botId) throw new Error("Bot ID is required");
     return getBotGroupsAndMembers(botId);
+  });
+
+  ipcMain.handle("stats:getGlobal", async () => {
+    const now = new Date();
+
+    const startOfToday = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate()
+    );
+
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const weekDate = new Date(now);
+    const day = weekDate.getDay();
+    const diff = weekDate.getDate() - day + (day === 0 ? -6 : 1);
+    const startOfWeek = new Date(weekDate.setDate(diff));
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    return getGlobalStats(
+      startOfMonth.toISOString(),
+      startOfWeek.toISOString(),
+      startOfToday.toISOString()
+    );
   });
 
   ipcMain.handle(

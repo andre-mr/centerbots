@@ -13,6 +13,7 @@ import {
 import { PlanStatus, PlanTier } from "../models/app-settings-options-model";
 import { BotGroup } from "../models/bot-group";
 import { AuthorizedNumber } from "../models/authorized-number-model";
+import { GlobalStats } from "../models/global-stats";
 
 function all<T>(sql: string, params: any[] = []): Promise<T[]> {
   return new Promise((resolve, reject) => {
@@ -880,6 +881,48 @@ export async function getBotGroupsAndMembers(botId: number): Promise<{
     broadcastGroups: row?.broadcastGroups || 0,
     broadcastMembers: row?.broadcastMembers || 0,
   };
+}
+
+export async function getGlobalStats(
+  startOfMonth: string,
+  startOfWeek: string,
+  startOfToday: string
+): Promise<GlobalStats> {
+  const sql = `
+    SELECT
+      (SELECT COUNT(*) FROM bots) as totalBots,
+      (SELECT COUNT(*) FROM groups) as totalGroups,
+      (SELECT COUNT(DISTINCT group_id) FROM bot_groups WHERE broadcast = 1) as broadcastGroups,
+      (SELECT COUNT(DISTINCT member_id) FROM group_members) as totalMembers,
+      (SELECT COUNT(DISTINCT gm.member_id)
+         FROM group_members gm
+         JOIN bot_groups bg ON gm.group_id = bg.group_id
+        WHERE bg.broadcast = 1) as broadcastMembers,
+      (SELECT COUNT(*) FROM messages) as totalMessages,
+      (SELECT COUNT(*) FROM messages WHERE timestamp >= ?) as monthMessages,
+      (SELECT COUNT(*) FROM messages WHERE timestamp >= ?) as weekMessages,
+      (SELECT COUNT(*) FROM messages WHERE timestamp >= ?) as todayMessages
+  `;
+
+  const row = await get<GlobalStats>(sql, [
+    startOfMonth,
+    startOfWeek,
+    startOfToday,
+  ]);
+
+  return (
+    row || {
+      totalBots: 0,
+      totalGroups: 0,
+      broadcastGroups: 0,
+      totalMembers: 0,
+      broadcastMembers: 0,
+      totalMessages: 0,
+      monthMessages: 0,
+      weekMessages: 0,
+      todayMessages: 0,
+    }
+  );
 }
 
 export async function getDatabaseBackup(): Promise<{

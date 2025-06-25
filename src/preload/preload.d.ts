@@ -4,6 +4,7 @@ import AppSettings from "@renderer/models/app-settings-model";
 import { BotGroup } from "../models/bot-group-model";
 import { Group } from "src/models/group-model";
 import { Message } from "../models/message-model";
+import { GlobalStats } from "../models/global-stats";
 
 interface ExposedApi {
   getAppSettings: () => Promise<AppSettings | null>;
@@ -54,6 +55,7 @@ interface ExposedApi {
   moveMessageUp: (botId: number, idx: number) => Promise<void>;
   moveMessageDown: (botId: number, idx: number) => Promise<void>;
   deleteMessageFromQueue: (botId: number, idx: number) => Promise<void>;
+  getGlobalStats: () => Promise<GlobalStats>;
 
   onLicenseInvalid: (callback: () => void) => () => void;
   onLicenseGrace: (callback: () => void) => () => void;

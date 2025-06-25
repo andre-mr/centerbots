@@ -1,7 +1,7 @@
 {
   "name": "centerbots",
   "version": "1.0.0",
-  "description": "Desktop app to manage multiple WhatsApp bots using Electron, React and Baileys.",
+  "description": "CenterBots",
   "main": "./out/main/main.js",
   "author": "Andre MR",
   "scripts": {

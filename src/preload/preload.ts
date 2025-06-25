@@ -28,6 +28,7 @@ const exposedApi = {
     ipcRenderer.invoke("bots:moveMessageDown", botId, idx),
   deleteMessageFromQueue: (botId: number, idx: number) =>
     ipcRenderer.invoke("bots:deleteMessageFromQueue", botId, idx),
+  getGlobalStats: () => ipcRenderer.invoke("stats:getGlobal"),
 
   onStatusUpdate: (callback: (bot: Bot) => void) => {
     const handler = (_event: any, bot: Bot) => callback(bot);

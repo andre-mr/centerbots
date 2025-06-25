@@ -91,7 +91,10 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    if (settings?.PlanStatus === PlanStatus.GracePeriod) {
+    if (
+      settings?.PlanStatus === PlanStatus.GracePeriod ||
+      settings?.PlanStatus === PlanStatus.Invalid
+    ) {
       setActiveSection("settings");
     }
   }, [settings?.PlanStatus]);
@@ -185,7 +188,6 @@ const App: React.FC = () => {
     });
     const removeValid = window.appApi.onLicenseValid(() => {
       refreshSettings();
-      setActiveSection("bots");
     });
     return () => {
       removeInvalid();
