@@ -45,6 +45,35 @@ function run(
   });
 }
 
+/** TRANSACTION CONTROL **/
+
+export function beginTransaction(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    database.run("BEGIN TRANSACTION", (err) => {
+      if (err) return reject(err);
+      resolve();
+    });
+  });
+}
+
+export function commitTransaction(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    database.run("COMMIT", (err) => {
+      if (err) return reject(err);
+      resolve();
+    });
+  });
+}
+
+export function rollbackTransaction(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    database.run("ROLLBACK", (err) => {
+      if (err) return reject(err);
+      resolve();
+    });
+  });
+}
+
 /** APP_CONFIG **/
 
 export async function getAppSettings(): Promise<AppSettings | null> {

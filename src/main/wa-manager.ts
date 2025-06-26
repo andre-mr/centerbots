@@ -27,6 +27,9 @@ import {
   deleteGroupMember,
   deleteBotGroup,
   createMessage,
+  beginTransaction,
+  commitTransaction,
+  rollbackTransaction,
 } from "./db-commands";
 import { app } from "electron";
 import path from "path";
@@ -120,46 +123,60 @@ export class WaManager {
     botId: number,
     serverGroupsMetadata: Record<string, any>
   ) {
-    const localGroups = await getGroupsByBotId(botId);
-    const serverGroupJids = new Set(Object.keys(serverGroupsMetadata));
+    await beginTransaction();
+    try {
+      const localGroups = await getGroupsByBotId(botId);
+      const serverGroupJids = new Set(Object.keys(serverGroupsMetadata));
 
-    for (const groupJid of serverGroupJids) {
-      const meta = serverGroupsMetadata[groupJid];
-      let groupId: number;
-      const localGroup = localGroups.find((g) => g.GroupJid === groupJid);
-      if (!localGroup) {
-        groupId = await createGroup(
-          new Group(0, groupJid, meta.subject, meta.size)
+      for (const groupJid of serverGroupJids) {
+        const meta = serverGroupsMetadata[groupJid];
+        let groupId: number;
+        const localGroup = localGroups.find((g) => g.GroupJid === groupJid);
+        if (!localGroup) {
+          groupId = await createGroup(
+            new Group(0, groupJid, meta.subject, meta.size)
+          );
+        } else {
+          groupId = localGroup.Id;
+          await updateGroup(
+            new Group(groupId, groupJid, meta.subject, meta.size)
+          );
+        }
+        await createBotGroup(botId, groupId, 0);
+
+        const localMembers = await getMembersByGroupId(groupId);
+        const serverMemberJids = new Set(
+          meta.participants.map((p: any) => p.id)
         );
-      } else {
-        groupId = localGroup.Id;
-        await updateGroup(
-          new Group(groupId, groupJid, meta.subject, meta.size)
-        );
-      }
-      await createBotGroup(botId, groupId, 0);
 
-      const localMembers = await getMembersByGroupId(groupId);
-      const serverMemberJids = new Set(meta.participants.map((p: any) => p.id));
+        for (const p of meta.participants) {
+          const memberId = await getOrCreateMemberId(p.id);
+          await createGroupMember(groupId, memberId, p.admin ? true : false);
 
-      for (const p of meta.participants) {
-        const memberId = await getOrCreateMemberId(p.id);
-        await createGroupMember(groupId, memberId, p.admin ? true : false);
+          await updateGroupMemberAdmin(
+            groupId,
+            memberId,
+            p.admin ? true : false
+          );
+        }
 
-        await updateGroupMemberAdmin(groupId, memberId, p.admin ? true : false);
-      }
-
-      for (const local of localMembers) {
-        if (!serverMemberJids.has(local.MemberJid)) {
-          await deleteGroupMember(groupId, local.Id);
+        for (const local of localMembers) {
+          if (!serverMemberJids.has(local.MemberJid)) {
+            await deleteGroupMember(groupId, local.Id);
+          }
         }
       }
-    }
 
-    for (const local of localGroups) {
-      if (!serverGroupJids.has(local.GroupJid)) {
-        await deleteBotGroup(botId, local.Id);
+      for (const local of localGroups) {
+        if (!serverGroupJids.has(local.GroupJid)) {
+          await deleteBotGroup(botId, local.Id);
+        }
       }
+      await commitTransaction();
+    } catch (err) {
+      console.error("Error during group sync, rolling back transaction:", err);
+      await rollbackTransaction();
+      throw err;
     }
   }
 
@@ -191,131 +208,178 @@ export class WaManager {
         return botInstance?.groupMetadataCache?.[jid];
       },
       generateHighQualityLinkPreview: false,
-      ...(proxyAgent ? { agent: proxyAgent, fetchAgent: proxyAgent } : {}),
+      ...(proxyAgent ? { agent: proxyAgent } : {}),
     });
 
     sock.ev.on("connection.update", async (update) => {
-      const { connection, lastDisconnect, qr } = update;
-      if (qr) {
-        this.mainWindow.webContents.send("bot:qrCode", { botId: bot.Id, qr });
-        bot.Status = Status.LoggedOut;
-        this.mainWindow.webContents.send("bot:statusUpdate", bot);
-      } else {
-        this.mainWindow.webContents.send("bot:qrCode", {
-          botId: bot.Id,
-          qr: "",
-        });
-      }
-
-      if (connection === "open") {
-        bot.Status = Status.Online;
-        await updateBot(bot);
-        this.mainWindow.webContents.send("bot:statusUpdate", bot);
-
-        if (botInstance) botInstance.reconnectAttempts = 0;
-
-        const now = Date.now();
-        if (
-          !botInstance?.lastGroupFetch ||
-          now - botInstance.lastGroupFetch > 60_000
-        ) {
-          let groupMetadataCache = await sock.groupFetchAllParticipating();
-          groupMetadataCache = Object.fromEntries(
-            Object.entries(groupMetadataCache).sort(([, a], [, b]) => {
-              const subjectA = (a.subject || "").toLowerCase();
-              const subjectB = (b.subject || "").toLowerCase();
-              return subjectA.localeCompare(subjectB);
-            })
-          );
-          if (botInstance) {
-            botInstance.groupMetadataCache = groupMetadataCache;
-            botInstance.lastGroupFetch = now;
-            await this.syncBotGroupsAndMembers(
-              bot.Id,
-              botInstance.groupMetadataCache
-            );
-          }
-        }
-      }
-
-      if (connection === "close") {
-        const instance = this.bots.get(bot.Id);
-
-        if (instance?.isRenaming && instance.newWaNumber) {
-          instance.isRenaming = false;
-          const oldWaNumber = bot.WaNumber;
-          const newWaNumber = instance.newWaNumber;
-          instance.newWaNumber = null;
-
-          const oldAuthDir = path.join(
-            app.getPath("userData"),
-            "auth",
-            oldWaNumber
-          );
-          const newAuthDir = path.join(
-            app.getPath("userData"),
-            "auth",
-            newWaNumber
-          );
-
-          try {
-            if (fs.existsSync(oldAuthDir) && !fs.existsSync(newAuthDir)) {
-              await fsp.rename(oldAuthDir, newAuthDir);
-            }
-            bot.WaNumber = newWaNumber;
-            instance.bot.WaNumber = newWaNumber;
-            await updateBot(bot);
-            this.mainWindow.webContents.send("bot:statusUpdate", bot);
-          } catch (err) {
-            console.error(
-              "❌ Failed to rename auth sub-directory. Restarting bot with old information."
-            );
-          }
-
-          this.startBot(bot);
+      try {
+        const botInstance = this.bots.get(bot.Id);
+        if (!botInstance?.bot.Active) {
           return;
         }
-
-        const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
-        if (statusCode === DisconnectReason.loggedOut) {
-          const fs = require("fs");
-          const rimraf = require("rimraf");
-          try {
-            if (fs.existsSync(authDir)) {
-              rimraf.sync(authDir);
-            }
-          } catch (err) {
-            console.error("❌ Error removing authentication directory!");
-          }
+        const { connection, lastDisconnect, qr } = update;
+        if (qr) {
+          this.mainWindow.webContents.send("bot:qrCode", { botId: bot.Id, qr });
           bot.Status = Status.LoggedOut;
-          await updateBot(bot);
           this.mainWindow.webContents.send("bot:statusUpdate", bot);
         } else {
-          const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-          bot.Status = Status.Disconnected;
-          await updateBot(bot);
-          this.mainWindow.webContents.send("bot:statusUpdate", bot);
+          this.mainWindow.webContents.send("bot:qrCode", {
+            botId: bot.Id,
+            qr: "",
+          });
+        }
 
-          if (shouldReconnect && !instance?.manualDisconnect) {
-            if (instance) {
-              instance.reconnectAttempts++;
-              if (instance.reconnectAttempts <= 5) {
-                this.startBot(bot);
-              } else {
-                setTimeout(() => {
-                  this.startBot(bot);
-                }, 60000);
+        if (connection === "open") {
+          const instance = this.bots.get(bot.Id);
+          if (bot.Active) {
+            bot.Status = Status.Online;
+            await updateBot(bot);
+            this.mainWindow.webContents.send("bot:statusUpdate", bot);
+          } else {
+            if (instance?.socket) {
+              try {
+                const ws = (instance.socket as any)?.ws;
+                if (ws && (ws.readyState === 1 || ws.readyState === 0)) {
+                  instance.socket.end(undefined);
+                }
+              } catch (err) {
+                console.error(
+                  "Erro ao tentar encerrar socket após conexão aberta:",
+                  err
+                );
               }
-            } else {
-              this.startBot(bot);
+              instance.socket = null;
+              instance.stop = null;
+              instance.messageQueue = [];
+              instance.bot.Status = Status.Offline;
+              this.mainWindow.webContents.send(
+                "bot:statusUpdate",
+                instance.bot
+              );
             }
           }
-          if (instance) instance.manualDisconnect = false;
+          if (botInstance) botInstance.reconnectAttempts = 0;
+
+          const now = Date.now();
+          if (
+            !botInstance?.lastGroupFetch ||
+            now - botInstance.lastGroupFetch > 60_000
+          ) {
+            let groupMetadataCache = await sock.groupFetchAllParticipating();
+            groupMetadataCache = Object.fromEntries(
+              Object.entries(groupMetadataCache).sort(([, a], [, b]) => {
+                const subjectA = (a.subject || "").toLowerCase();
+                const subjectB = (b.subject || "").toLowerCase();
+                return subjectA.localeCompare(subjectB);
+              })
+            );
+            if (botInstance) {
+              botInstance.groupMetadataCache = groupMetadataCache;
+              botInstance.lastGroupFetch = now;
+              await this.syncBotGroupsAndMembers(
+                bot.Id,
+                botInstance.groupMetadataCache
+              );
+            }
+          }
+        }
+
+        if (connection === "close") {
+          const instance = this.bots.get(bot.Id);
+
+          if (instance?.isRenaming && instance.newWaNumber) {
+            instance.isRenaming = false;
+            const oldWaNumber = bot.WaNumber;
+            const newWaNumber = instance.newWaNumber;
+            instance.newWaNumber = null;
+
+            const oldAuthDir = path.join(
+              app.getPath("userData"),
+              "auth",
+              oldWaNumber
+            );
+            const newAuthDir = path.join(
+              app.getPath("userData"),
+              "auth",
+              newWaNumber
+            );
+
+            try {
+              if (fs.existsSync(oldAuthDir) && !fs.existsSync(newAuthDir)) {
+                await fsp.rename(oldAuthDir, newAuthDir);
+              }
+              bot.WaNumber = newWaNumber;
+              instance.bot.WaNumber = newWaNumber;
+              await updateBot(bot);
+              this.mainWindow.webContents.send("bot:statusUpdate", bot);
+            } catch (err) {
+              console.error(
+                "❌ Failed to rename auth sub-directory. Restarting bot with old information."
+              );
+            }
+
+            this.startBot(bot);
+            return;
+          }
+
+          const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
+          if (statusCode === DisconnectReason.loggedOut) {
+            const fs = require("fs");
+            const rimraf = require("rimraf");
+            try {
+              if (fs.existsSync(authDir)) {
+                rimraf.sync(authDir);
+              }
+            } catch (err) {
+              console.error("❌ Error removing authentication directory!");
+            }
+            bot.Status = Status.LoggedOut;
+            await updateBot(bot);
+            this.mainWindow.webContents.send("bot:statusUpdate", bot);
+          } else {
+            const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+            bot.Status = Status.Disconnected;
+            await updateBot(bot);
+            this.mainWindow.webContents.send("bot:statusUpdate", bot);
+
+            if (shouldReconnect && !instance?.manualDisconnect && bot.Active) {
+              if (instance) {
+                instance.reconnectAttempts++;
+                if (instance.reconnectAttempts <= 5) {
+                  this.startBot(bot);
+                } else {
+                  setTimeout(() => {
+                    this.startBot(bot);
+                  }, 60000);
+                }
+              } else {
+                this.startBot(bot);
+              }
+            }
+            if (instance) instance.manualDisconnect = false;
+          }
+        }
+      } catch (err) {
+        console.error("❌ Erro no evento connection.update:", err);
+        const instance = this.bots.get(bot.Id);
+        if (instance && !instance.manualDisconnect && instance.bot.Active) {
+          instance.reconnectAttempts++;
+          if (instance.reconnectAttempts <= 5) {
+            this.startBot(bot);
+          } else {
+            setTimeout(() => {
+              this.startBot(bot);
+            }, 60000);
+          }
         }
       }
     });
 
     sock.ev.on("creds.update", async () => {
+      const botInstance = this.bots.get(bot.Id);
+      if (!botInstance?.bot.Active) {
+        return;
+      }
       await saveCreds();
 
       const userNumber = sock.user?.id?.match(/^\d+/)?.[0];
@@ -333,9 +397,13 @@ export class WaManager {
       }
     });
 
-    /** MESSAGES MANAGEMENT **/
     sock.ev.on("messages.upsert", async ({ messages, type }) => {
       if (type !== "notify") return;
+
+      const botInstance = this.bots.get(bot.Id);
+      if (!botInstance?.bot.Active) {
+        return;
+      }
 
       for (const msg of messages) {
         const sender =
@@ -442,7 +510,14 @@ export class WaManager {
       botInstance.bot = bot;
       botInstance.socket = sock;
       botInstance.stop = async () => {
-        sock.end(undefined);
+        try {
+          const ws = (sock as any)?.ws;
+          if (ws && (ws.readyState === 1 || ws.readyState === 0)) {
+            sock.end(undefined);
+          }
+        } catch (err) {
+          console.error("Erro ao tentar encerrar o socket:", err);
+        }
       };
       botInstance.authorizedNumbers = authorizedNumbers;
     } else {
@@ -451,7 +526,14 @@ export class WaManager {
         socket: sock,
         messageQueue: [],
         stop: async () => {
-          sock.end(undefined);
+          try {
+            const ws = (sock as any)?.ws;
+            if (ws && (ws.readyState === 1 || ws.readyState === 0)) {
+              sock.end(undefined);
+            }
+          } catch (err) {
+            console.error("Erro ao tentar encerrar o socket:", err);
+          }
         },
         authorizedNumbers,
         manualDisconnect: false,
@@ -654,6 +736,7 @@ export class WaManager {
       instance.socket = null;
       instance.messageQueue = [];
       instance.stop = null;
+      instance.reconnectAttempts = 0;
       instance.bot.Status = Status.Offline;
       this.mainWindow.webContents.send("bot:qrCode", {
         botId: instance.bot.Id,
