@@ -6,6 +6,7 @@ import {
   AuthenticationCreds,
   downloadMediaMessage,
 } from "baileys";
+import { initAuthCreds } from "baileys/lib/Utils/auth-utils.js";
 import { BufferJSON } from "baileys/lib/Utils/generics.js";
 import { Bot } from "../models/bot-model";
 import {
@@ -255,7 +256,6 @@ export class WaManager {
         },
       };
     } else {
-      const { initAuthCreds } = await import("baileys/lib/Utils/auth-utils.js");
       auth = {
         creds: initAuthCreds(),
         keys: { get: async () => ({}), set: async () => {} },
