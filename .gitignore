@@ -7,4 +7,3 @@ out
 .vscode
 dev
 .env*
-package-lock.json
