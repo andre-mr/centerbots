@@ -270,7 +270,7 @@ export class WaManager {
       logger: pino({ level: "error" }),
       cachedGroupMetadata: async (jid) => botInstance.groupMetadataCache?.[jid],
       generateHighQualityLinkPreview: false,
-      agent: proxyAgent || undefined,
+      agent: (proxyAgent as any) || undefined,
       shouldSyncHistoryMessage: () => false,
     });
 
