@@ -26,11 +26,11 @@ function createWindow(): BrowserWindow {
 
   setupIpcHandlers();
 
-  mainWindow.webContents.on("before-input-event", (_event, input) => {
-    if (input.key === "F12" && input.type === "keyDown") {
-      mainWindow.webContents.openDevTools({ mode: "detach" });
-    }
-  });
+  // mainWindow.webContents.on("before-input-event", (_event, input) => {
+  //   if (input.key === "F12" && input.type === "keyDown") {
+  //     mainWindow.webContents.openDevTools({ mode: "detach" });
+  //   }
+  // });
 
   mainWindow.maximize();
 
