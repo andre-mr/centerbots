@@ -1,4 +1,5 @@
 import database from "./db-connection";
+import { BufferJSON } from "baileys/lib/Utils/generics.js";
 import AppSettings from "../models/app-settings-model";
 import { Group } from "../models/group-model";
 import { Member } from "../models/member-model";
@@ -577,7 +578,7 @@ export async function updateBot(bot: Bot): Promise<void> {
      WHERE id = ?
   `;
   await run(sql, [
-    bot.WaNumber,
+    bot.WaNumber || null,
     bot.Campaign,
     bot.WhatsAppSources,
     bot.SendMethod,
@@ -877,6 +878,20 @@ export async function purgeOldMessages(days: number = 30): Promise<number> {
   return changes;
 }
 
+export async function deleteOrphanMembers(): Promise<void> {
+  await run(`
+    DELETE FROM members
+    WHERE id NOT IN (SELECT DISTINCT member_id FROM group_members)
+  `);
+}
+
+export async function deleteOrphanGroups(): Promise<void> {
+  await run(`
+    DELETE FROM groups
+    WHERE id NOT IN (SELECT DISTINCT group_id FROM bot_groups)
+  `);
+}
+
 /** BOT GROUPS & MEMBERS STATS **/
 export async function getBotGroupsAndMembers(botId: number): Promise<{
   totalGroups: number;
@@ -964,7 +979,31 @@ export async function getDatabaseBackup(): Promise<{
   messages: number;
 }> {
   const appConfig = await all<any>(`SELECT * FROM app_config`);
-  const bots = await all<any>(`SELECT * FROM bots`);
+  const bots = await all<{
+    id: number;
+    wa_number: string;
+    campaign: string | null;
+    whatsapp_sources: string;
+    send_method: string;
+    delay_between_groups: number;
+    delay_between_messages: number;
+    link_parameters: string | null;
+    updated: string;
+    proxy: boolean;
+  }>(
+    `SELECT 
+      id, 
+      wa_number, 
+      campaign, 
+      whatsapp_sources, 
+      send_method, 
+      delay_between_groups, 
+      delay_between_messages, 
+      link_parameters, 
+      updated, 
+      CASE WHEN proxy IS NOT NULL AND proxy != '' THEN 1 ELSE 0 END AS proxy 
+    FROM bots`
+  );
   const authorizedNumbers = await all<any>(`SELECT * FROM authorized_numbers`);
   const [{ count: groups }] = await all<{ count: number }>(
     `SELECT COUNT(*) as count FROM groups`
@@ -988,4 +1027,68 @@ export async function getDatabaseBackup(): Promise<{
     members,
     messages,
   };
+}
+
+/** AUTH STATE em JSON bruto **/
+export async function getAuthState(botId: number): Promise<string | null> {
+  const row = await get<{ auth: string }>(
+    `SELECT auth FROM bots WHERE id = ?`,
+    [botId]
+  );
+  return row?.auth ?? null;
+}
+
+export async function updateAuthState(
+  botId: number,
+  auth: string
+): Promise<void> {
+  await run(`UPDATE bots SET auth = ? WHERE id = ?`, [auth, botId]);
+}
+
+export async function clearAuthState(botId: number): Promise<void> {
+  await run(`UPDATE bots SET auth = NULL WHERE id = ?`, [botId]);
+  await run(`DELETE FROM bot_keys WHERE bot_id = ?`, [botId]);
+}
+
+export async function getAuthKeys(
+  botId: number,
+  category: string,
+  ids: string[]
+): Promise<Record<string, any>> {
+  const placeholders = ids.map(() => "?").join(",");
+  const rows = await all<{ key_id: string; value_json: string }>(
+    `SELECT key_id, value_json FROM bot_keys
+     WHERE bot_id = ? AND category = ? AND key_id IN (${placeholders})`,
+    [botId, category, ...ids]
+  );
+  const result: Record<string, any> = {};
+  for (const { key_id, value_json } of rows) {
+    result[key_id] = JSON.parse(value_json, BufferJSON.reviver);
+  }
+  return result;
+}
+
+export async function upsertAuthKey(
+  botId: number,
+  category: string,
+  keyId: string,
+  value: any
+): Promise<void> {
+  await run(
+    `INSERT INTO bot_keys(bot_id,category,key_id,value_json)
+     VALUES(?,?,?,?)
+     ON CONFLICT(bot_id,category,key_id) DO UPDATE SET value_json=excluded.value_json`,
+    [botId, category, keyId, JSON.stringify(value, BufferJSON.replacer)]
+  );
+}
+
+export async function deleteAuthKey(
+  botId: number,
+  category: string,
+  keyId: string
+): Promise<void> {
+  await run(
+    `DELETE FROM bot_keys WHERE bot_id = ? AND category = ? AND key_id = ?`,
+    [botId, category, keyId]
+  );
 }

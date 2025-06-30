@@ -60,7 +60,7 @@ const SettingsPage: React.FC = () => {
         const fetchedStats = await window.appApi.getGlobalStats();
         setStats(fetchedStats);
       } catch (err) {
-        console.error("Erro ao buscar estatísticas:", err);
+        console.error("❌ Error fetching statistics:", err);
       } finally {
         setIsLoadingStats(false);
       }
@@ -255,7 +255,7 @@ const SettingsPage: React.FC = () => {
                       </div>
                       <div className="flex items-center justify-between border-white dark:border-gray-600">
                         <span className="whitespace-nowrap text-blue-700 dark:text-blue-300">
-                          Grupos Ativos
+                          Grupos Selecionados
                         </span>
                         <span className="mx-2 w-full border-t border-white dark:border-gray-600"></span>
                         <span className="font-bold text-blue-800 dark:text-blue-200">

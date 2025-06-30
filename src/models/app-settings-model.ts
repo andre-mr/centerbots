@@ -6,8 +6,9 @@ class AppSettings {
   UserId: string | null = null;
   PlanStatus: PlanStatus = PlanStatus.Invalid;
   PlanTier: PlanTier = PlanTier.Basic;
-  RegisteredBots: string[] = [];
-  AppVersion: string = "1.0.0";
+  RegisteredBots: (string | null)[] = [];
+  Proxy: boolean = false;
+  AppVersion: string = "1.1.0";
   MachineId: string | null = null;
   LastIP: string | null = null;
   LastCheckin: string = new Date().toISOString();

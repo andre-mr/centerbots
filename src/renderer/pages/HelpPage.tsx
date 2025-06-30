@@ -8,6 +8,7 @@ import {
   MdPlayCircleFilled,
 } from "react-icons/md";
 import { IoSync } from "react-icons/io5";
+import packageJson from "../../../package.json";
 
 const HelpPage: React.FC = () => {
   return (
@@ -15,7 +16,10 @@ const HelpPage: React.FC = () => {
       <div className="mb-6 flex items-center gap-2">
         <span className="text-3xl">🤖</span>
         <h2 className="text-3xl font-bold text-emerald-700 dark:text-emerald-400">
-          Guia Rápido — CenterBots
+          Guia Rápido - CenterBots
+          <span className="ml-4 text-xl text-gray-500 dark:text-gray-400">
+            {` (v${packageJson.version})`}
+          </span>
         </h2>
       </div>
 
@@ -126,14 +130,17 @@ const HelpPage: React.FC = () => {
             </span>
           </li>
           <li className="flex items-center gap-2">
-            <MdHighlightOff className="text-2xl text-yellow-500 dark:text-yellow-400" />
+            <MdHighlightOff className="animate-pulse text-2xl text-yellow-500 dark:text-yellow-400" />
             <span>
               <b>Desconectado:</b> O bot perdeu a conexão com o WhatsApp e está
               tentando se reconectar.
             </span>
           </li>
           <li className="flex items-center gap-2">
-            <MdError className="animate-pulse text-2xl text-red-500 dark:text-red-400" />
+            <span className="relative flex items-center justify-center">
+              <span className="absolute inline-flex h-5 w-5 animate-ping rounded-full bg-red-400 opacity-60"></span>
+              <MdError className="relative text-2xl text-red-500 dark:text-red-400" />
+            </span>
             <span>
               <b>Deslogado:</b> O bot foi desconectado da conta e precisa ser
               autorizado novamente por QR Code.

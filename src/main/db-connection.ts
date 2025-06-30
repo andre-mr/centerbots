@@ -8,6 +8,64 @@ fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
 sqlite3.verbose();
 
+function migrate(db: sqlite3.Database): Promise<void> {
+  return new Promise((resolve, reject) => {
+    db.get("PRAGMA user_version", (err, row: any) => {
+      if (err) return reject(err);
+      const current = row?.user_version ?? 0;
+
+      if (current < 1) {
+        /* ------------------------------ Migration for version 1 ----------------------------- */
+        db.serialize(() => {
+          db.run("BEGIN");
+          db.run(`ALTER TABLE bots ADD COLUMN auth TEXT;`, (alterErr) => {
+            if (alterErr && !/duplicate column/i.test(alterErr.message)) {
+              db.run("ROLLBACK");
+              return reject(alterErr);
+            }
+
+            db.run(
+              `CREATE TABLE IF NOT EXISTS bot_keys (
+                   bot_id     INTEGER NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
+                   category   TEXT    NOT NULL,
+                   key_id     TEXT    NOT NULL,
+                   value_json TEXT    NOT NULL,
+                   PRIMARY KEY (bot_id, category, key_id)
+                 );`,
+              (createErr) => {
+                if (createErr) {
+                  db.run("ROLLBACK");
+                  return reject(createErr);
+                }
+
+                db.run("PRAGMA user_version = 1;", (verErr) => {
+                  if (verErr) {
+                    db.run("ROLLBACK");
+                    return reject(verErr);
+                  }
+                  db.run("COMMIT", (commitErr) =>
+                    commitErr ? reject(commitErr) : resolve()
+                  );
+                });
+              }
+            );
+          });
+        });
+        return;
+      }
+
+      if (current < 2) {
+        /* ------------------------------ Migration for version 2 ----------------------------- */
+        // Future migration code for version 2 goes here.
+        return resolve();
+      }
+
+      // No migration needed
+      resolve();
+    });
+  });
+}
+
 const schema = `
 -- General application configuration
 CREATE TABLE IF NOT EXISTS app_config (
@@ -18,7 +76,7 @@ CREATE TABLE IF NOT EXISTS app_config (
     plan_status         TEXT    NOT NULL,                    -- PlanStatus: 'Valid', 'Grace', 'Invalid'
     plan_tier           TEXT    NOT NULL,                    -- PlanTier: 'Basic', 'Full'
     registered_bots     TEXT    NOT NULL DEFAULT '[]',       -- JSON array of registered bot IDs
-    app_version         TEXT    NOT NULL DEFAULT '1.0.0',    -- Application version
+    app_version         TEXT    NOT NULL DEFAULT '1.1.0',    -- Application version
     machine_id          TEXT,                                -- Unique machine identifier
     last_ip             TEXT,                                -- Last known public IP address
     last_checkin        TEXT    NOT NULL,                    -- ISO datetime of last license check
@@ -36,7 +94,17 @@ CREATE TABLE IF NOT EXISTS bots (
     delay_between_messages  INTEGER NOT NULL DEFAULT 10,  -- in seconds
     link_parameters         TEXT    NOT NULL,             -- Link parameters (LinkParameters: 'all', 'source', 'medium', 'none')
     updated                 TEXT    NOT NULL,             -- ISO datetime
-    proxy                   TEXT                          -- Proxy URL (opcional)
+    proxy                   TEXT,                         -- Proxy URL (opcional)
+    auth                    TEXT                          -- Proxy URL (opcional)
+);
+
+-- Bot configuration keys (N:N)
+CREATE TABLE IF NOT EXISTS bot_keys (
+  bot_id     INTEGER NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
+  category   TEXT    NOT NULL,
+  key_id     TEXT    NOT NULL,
+  value_json TEXT    NOT NULL,
+  PRIMARY KEY(bot_id, category, key_id)
 );
 
 -- Groups
@@ -134,19 +202,24 @@ export const dbReady: Promise<void> = new Promise((resolve, reject) => {
       if (err) {
         console.error("❌ Error configuring the database schema!");
         reject(err);
+        return;
       } else {
-        const initSql = `
-          INSERT OR IGNORE INTO app_config (id, license_key, dark_mode, user_id, plan_status, plan_tier, registered_bots, app_version, machine_id, last_ip, last_checkin, platform)
-          VALUES (1, NULL, 0, NULL, 'Invalid', 'Basic', '[]', '1.0.0', NULL, NULL, '${new Date().toISOString()}', NULL);
-        `;
-        database.run(initSql, (initErr) => {
-          if (initErr) {
-            console.error("❌ Error initializing app_config!");
-            reject(initErr);
-          } else {
-            resolve();
-          }
-        });
+        migrate(database)
+          .then(() => {
+            const initSql = `
+            INSERT OR IGNORE INTO app_config (id, license_key, dark_mode, user_id, plan_status, plan_tier, registered_bots, app_version, machine_id, last_ip, last_checkin, platform)
+            VALUES (1, NULL, 0, NULL, 'Invalid', 'Basic', '[]', '1.1.0', NULL, NULL, '${new Date().toISOString()}', NULL);
+          `;
+            database.run(initSql, (initErr) => {
+              if (initErr) {
+                console.error("❌ Error initializing app_config!");
+                reject(initErr);
+              } else {
+                resolve();
+              }
+            });
+          })
+          .catch(reject);
       }
     });
   });

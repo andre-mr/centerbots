@@ -30,4 +30,5 @@ export interface SendingMessageInfo {
   currentGroup: string;
   currentGroupIndex: number;
   totalGroups: number;
+  queueLength: number;
 }

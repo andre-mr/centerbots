@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Message } from "../../models/message-model";
+import { FiChevronDown, FiChevronUp, FiTrash2, FiCopy } from "react-icons/fi";
 
 interface BotMessageProps {
   msg: Message;
@@ -56,7 +57,7 @@ const BotMessage: React.FC<BotMessageProps> = ({
     >
       <div className="flex flex-row items-center gap-4 text-gray-800 dark:text-gray-200">
         <span className="whitespace-nowrap font-bold">{dateStr}</span>
-        <span className="whitespace-nowrap font-semibold text-green-700">
+        <span className="whitespace-nowrap font-semibold text-green-700 dark:text-green-400">
           {sender}
         </span>
         {isQueueItem && (
@@ -66,28 +67,32 @@ const BotMessage: React.FC<BotMessageProps> = ({
               onClick={onUp}
               className="rounded p-1 text-emerald-500 hover:bg-gray-200 dark:hover:bg-gray-700"
             >
-              ▲
+              <FiChevronUp className="h-5 w-5" />
             </button>
             <button
               title="Descer"
               onClick={onDown}
               className="rounded p-1 text-red-400 hover:bg-gray-200 dark:hover:bg-gray-700"
             >
-              ▼
+              <FiChevronDown className="h-5 w-5" />
             </button>
             <button
               title="Remover"
               onClick={onDelete}
               className="rounded p-1 hover:bg-red-100 dark:hover:bg-red-900"
             >
-              🗑️
+              <FiTrash2 className="h-5 w-5" />
             </button>
           </span>
         )}
       </div>
       <div className="relative ml-1 mt-1 flex flex-col">
         <span
-          className="break-words text-gray-800 dark:text-gray-100"
+          className={
+            expanded
+              ? "mr-16 break-words text-gray-800 dark:text-gray-100"
+              : "break-words text-gray-800 dark:text-gray-100"
+          }
           style={{ whiteSpace: "pre-line" }}
         >
           {contentLine1}
@@ -99,14 +104,14 @@ const BotMessage: React.FC<BotMessageProps> = ({
           <a
             href={firstUrl}
             target="_blank"
-            className="w-fit break-all text-blue-700 underline dark:text-blue-400"
+            className="mr-16 w-fit break-all text-blue-700 underline dark:text-blue-400"
           >
             {firstUrl}
           </a>
         )}
         <div className="absolute bottom-0 right-0 flex space-x-1">
           <button
-            className="rounded px-2 text-base hover:bg-gray-100 dark:hover:bg-gray-700"
+            className="rounded px-1 text-base text-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
             title="Copiar mensagem"
             onClick={() => {
               if (msg.Content) {
@@ -114,14 +119,18 @@ const BotMessage: React.FC<BotMessageProps> = ({
               }
             }}
           >
-            📋
+            <FiCopy className="h-5 w-5" />
           </button>
           <button
-            className="rounded px-2 text-base hover:bg-gray-100 dark:hover:bg-gray-700"
+            className="rounded px-1 text-base text-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
             title={expanded ? "Recolher" : "Expandir"}
             onClick={() => setExpanded((v) => !v)}
           >
-            {expanded ? "🔼" : "🔽"}
+            {expanded ? (
+              <FiChevronUp className="h-5 w-5" />
+            ) : (
+              <FiChevronDown className="h-5 w-5" />
+            )}
           </button>
         </div>
       </div>

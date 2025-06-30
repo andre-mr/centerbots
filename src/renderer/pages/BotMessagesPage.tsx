@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { Bot } from "../../models/bot-model";
 import { Message } from "../../models/message-model";
 import BotMessage from "../components/BotMessage";
+import { FiMessageSquare } from "react-icons/fi";
+import { FiFileText } from "react-icons/fi";
 
 interface BotMessagesPageProps {
   bot: Bot;
@@ -63,7 +65,7 @@ const BotMessagesPage: React.FC<BotMessagesPageProps> = ({ bot, onBack }) => {
       mounted = false;
       if (removeListener) removeListener();
     };
-  }, [bot.Id, bot.WaNumber]);
+  }, [bot.Id, bot.WaNumber, messages.length]);
 
   const handleMoveUp = async (idx: number) => {
     if (idx <= 0) return;
@@ -95,7 +97,9 @@ const BotMessagesPage: React.FC<BotMessagesPageProps> = ({ bot, onBack }) => {
               </div>
             ) : messages.length === 0 ? (
               <div className="flex h-full flex-1 flex-col items-center justify-center p-2 shadow">
-                <span className="mb-2 text-2xl">💬</span>
+                <span className="mb-2 text-2xl">
+                  <FiMessageSquare className="h-8 w-8 text-gray-500" />
+                </span>
                 <span className="text-gray-600 dark:text-gray-300">
                   Nenhuma mensagem na fila.
                 </span>
@@ -122,7 +126,9 @@ const BotMessagesPage: React.FC<BotMessagesPageProps> = ({ bot, onBack }) => {
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="mb-3 flex items-center justify-between border-b pb-2 dark:border-gray-700">
             <h2 className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">
-              Histórico recente
+              {`Histórico recente (${history.length} mensage${
+                history.length === 1 ? "m" : "ns"
+              })`}
             </h2>
           </div>
           <div className="min-h-0 flex-1">
@@ -134,7 +140,9 @@ const BotMessagesPage: React.FC<BotMessagesPageProps> = ({ bot, onBack }) => {
               )}
               {!loadingHistory && history.length === 0 && (
                 <div className="flex h-full flex-1 flex-col items-center justify-center p-2 shadow">
-                  <span className="mb-2 text-2xl">📜</span>
+                  <span className="mb-2 text-2xl">
+                    <FiFileText className="h-8 w-8 text-gray-500" />
+                  </span>
                   <span className="text-gray-600 dark:text-gray-300">
                     Nenhuma mensagem encontrada no histórico.
                   </span>

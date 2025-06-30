@@ -25,7 +25,18 @@ export function setupIpcHandlers() {
   });
 
   ipcMain.handle("settings:update", async (_event, settings) => {
-    await updateAppSettings(settings);
+    const appSettings = await getAppSettings();
+    if (
+      appSettings &&
+      (appSettings.UserId !== settings.UserId ||
+        appSettings.LicenseKey !== settings.LicenseKey)
+    ) {
+      await updateAppSettings(settings);
+      app.relaunch();
+      app.exit(0);
+    } else {
+      await updateAppSettings(settings);
+    }
     return getAppSettings();
   });
 
@@ -35,14 +46,6 @@ export function setupIpcHandlers() {
       throw new Error(
         "Não é possível adicionar mais bots. O limite de 6 bots foi atingido."
       );
-    }
-
-    if (!bot.WaNumber) {
-      bot.WaNumber = Date.now().toString();
-      const authDir = path.join(app.getPath("userData"), "auth", bot.WaNumber);
-      if (!fs.existsSync(authDir)) {
-        fs.mkdirSync(authDir, { recursive: true });
-      }
     }
 
     const lastInsertedId = await dbCreateBot(bot);

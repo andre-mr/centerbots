@@ -9,7 +9,7 @@ import {
 export class Bot {
   constructor(
     public Id: number,
-    public WaNumber: string,
+    public WaNumber: string | null,
     public Campaign: string | null,
     public WhatsAppSources: WhatsAppSources,
     public SendMethod: SendMethods,

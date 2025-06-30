@@ -8,6 +8,7 @@ import AppSettings from "../models/app-settings-model";
 import os from "os";
 import crypto from "crypto";
 import { PlanStatus, PlanTier } from "../models/app-settings-options-model";
+import packageJson from "../../package.json";
 
 function generateMachineId(): string {
   let parts: string[] = [];
@@ -62,9 +63,13 @@ export async function checkLicense(
       appSettings.Platform = platform;
       changed = true;
     }
+    if (appSettings.AppVersion !== packageJson.version) {
+      appSettings.AppVersion = packageJson.version;
+      changed = true;
+    }
 
     const bots = await getAllBots();
-    const botNumbers = bots.map((bot) => bot.WaNumber);
+    const botNumbers = bots.map((bot) => bot.WaNumber || "");
     if (
       JSON.stringify([...appSettings.RegisteredBots].sort()) !==
       JSON.stringify([...botNumbers].sort())

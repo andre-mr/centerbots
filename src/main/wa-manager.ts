@@ -1,9 +1,12 @@
 import {
   makeWASocket,
-  useMultiFileAuthState,
+  AuthenticationState,
   DisconnectReason,
   fetchLatestBaileysVersion,
+  AuthenticationCreds,
+  downloadMediaMessage,
 } from "baileys";
+import { BufferJSON } from "baileys/lib/Utils/generics.js";
 import { Bot } from "../models/bot-model";
 import {
   Status,
@@ -30,32 +33,39 @@ import {
   beginTransaction,
   commitTransaction,
   rollbackTransaction,
+  getAuthState,
+  updateAuthState,
+  getAuthKeys,
+  upsertAuthKey,
+  deleteAuthKey,
+  clearAuthState,
+  deleteOrphanMembers,
+  deleteOrphanGroups,
 } from "./db-commands";
-import { app } from "electron";
-import path from "path";
 import pino from "pino";
 import { Message } from "../models/message-model";
 import { AuthorizedNumber } from "../models/authorized-number-model";
 import { Group } from "../models/group-model";
-import fs from "fs";
-import fsp from "fs/promises";
 import metadata from "url-metadata";
 import sharp from "sharp";
 import { HttpsProxyAgent } from "https-proxy-agent";
+
+/* -------------------------------------------------------------------------- */
+/*                                   Types                                    */
+/* -------------------------------------------------------------------------- */
 
 type BotInstance = {
   bot: Bot;
   socket: ReturnType<typeof makeWASocket> | null;
   messageQueue: Message[];
-  stop: (() => Promise<void>) | null;
-  manualDisconnect: boolean;
-  authorizedNumbers: AuthorizedNumber[];
   groupMetadataCache: Record<string, any> | null;
-  lastGroupFetch: number | null;
   broadcastGroupJids: Set<string> | null;
-  isRenaming: boolean;
-  newWaNumber: string | null;
+  authorizedNumbers: AuthorizedNumber[];
+  lastGroupFetch: number | null;
   reconnectAttempts: number;
+  manualDisconnect: boolean;
+  isConnecting: boolean;
+  stop: (() => Promise<void>) | null;
 };
 
 type BotQueueState = {
@@ -65,14 +75,20 @@ type BotQueueState = {
   currentGroupIndex: number;
 };
 
+/* -------------------------------------------------------------------------- */
+/*                                 WaManager                                  */
+/* -------------------------------------------------------------------------- */
+
 export class WaManager {
-  private mainWindow: Electron.BrowserWindow;
-  private bots: Map<number, BotInstance> = new Map();
-  private botQueueStates: Map<number, BotQueueState> = new Map();
+  public mainWindow: Electron.BrowserWindow;
+  public bots: Map<number, BotInstance> = new Map();
+  public botQueueStates: Map<number, BotQueueState> = new Map();
 
   constructor(mainWindow: Electron.BrowserWindow) {
     this.mainWindow = mainWindow;
   }
+
+  /* ---------------------------- register and init --------------------------- */
 
   async registerBot(bot: Bot) {
     const authorizedNumbers = await getAuthorizedNumbers(bot.Id);
@@ -85,11 +101,10 @@ export class WaManager {
         stop: null,
         authorizedNumbers,
         manualDisconnect: false,
+        isConnecting: false,
         groupMetadataCache: null,
         lastGroupFetch: null,
         broadcastGroupJids: null,
-        isRenaming: false,
-        newWaNumber: null,
         reconnectAttempts: 0,
       });
     } else {
@@ -165,6 +180,7 @@ export class WaManager {
             await deleteGroupMember(groupId, local.Id);
           }
         }
+        await deleteOrphanMembers();
       }
 
       for (const local of localGroups) {
@@ -172,228 +188,190 @@ export class WaManager {
           await deleteBotGroup(botId, local.Id);
         }
       }
+      await deleteOrphanGroups();
       await commitTransaction();
     } catch (err) {
-      console.error("Error during group sync, rolling back transaction:", err);
+      console.error(
+        "❌ Error during group sync, rolling back transaction:",
+        err
+      );
       await rollbackTransaction();
       throw err;
     }
   }
 
+  /* -------------------------------------------------------------------------- */
+  /*                            BOT START / STOP                                */
+  /* -------------------------------------------------------------------------- */
+
   async startBot(bot: Bot) {
-    const authDir = path.join(app.getPath("userData"), "auth", bot.WaNumber);
-    const { state, saveCreds } = await useMultiFileAuthState(authDir);
+    const botInstance = this.bots.get(bot.Id);
+    if (!botInstance) {
+      console.error(`❌ Bot instance for ID ${bot.Id} not found.`);
+      return;
+    }
+
+    if (botInstance.socket && botInstance.isConnecting) {
+      return;
+    }
+    botInstance.isConnecting = true;
+    botInstance.manualDisconnect = false;
+
     const { version } = await fetchLatestBaileysVersion();
 
-    let authorizedNumbers = this.bots.get(bot.Id)?.authorizedNumbers;
-    if (!authorizedNumbers) {
+    let authorizedNumbers = botInstance.authorizedNumbers;
+    if (!authorizedNumbers?.length) {
       authorizedNumbers = await getAuthorizedNumbers(bot.Id);
     }
 
-    const botInstance = this.bots.get(bot.Id);
-
-    if (botInstance) botInstance.reconnectAttempts = 0;
-
+    /* ------------------------------ proxy agent ----------------------------- */
     let proxyAgent: HttpsProxyAgent<string> | null = null;
     if (bot.Proxy) {
       proxyAgent = new HttpsProxyAgent(bot.Proxy);
     }
 
+    /* --------------------------- load credentials -------------------------- */
+    const raw = await getAuthState(bot.Id);
+    let auth: AuthenticationState;
+
+    if (raw) {
+      const parsed = JSON.parse(raw, BufferJSON.reviver);
+      auth = {
+        creds: parsed.creds,
+        keys: {
+          get: async (category, ids) => getAuthKeys(bot.Id, category, ids),
+          set: async (data) => {
+            for (const cat in data) {
+              for (const id in data[cat]) {
+                const value = data[cat][id];
+                if (value) {
+                  await upsertAuthKey(bot.Id, cat, id, value);
+                } else {
+                  await deleteAuthKey(bot.Id, cat, id);
+                }
+              }
+            }
+          },
+        },
+      };
+    } else {
+      const { initAuthCreds } = await import("baileys/lib/Utils/auth-utils.js");
+      auth = {
+        creds: initAuthCreds(),
+        keys: { get: async () => ({}), set: async () => {} },
+      };
+    }
+
+    /* ---------------------------- create socket ---------------------------- */
     const sock = makeWASocket({
       version,
-      auth: state,
+      auth,
       printQRInTerminal: false,
-      logger: pino({ level: "silent" }),
-      cachedGroupMetadata: async (jid) => {
-        return botInstance?.groupMetadataCache?.[jid];
-      },
+      logger: pino({ level: "error" }),
+      cachedGroupMetadata: async (jid) => botInstance.groupMetadataCache?.[jid],
       generateHighQualityLinkPreview: false,
-      ...(proxyAgent ? { agent: proxyAgent } : {}),
+      agent: proxyAgent || undefined,
+      shouldSyncHistoryMessage: () => false,
     });
 
     sock.ev.on("connection.update", async (update) => {
-      try {
-        const botInstance = this.bots.get(bot.Id);
-        if (!botInstance?.bot.Active) {
-          return;
-        }
-        const { connection, lastDisconnect, qr } = update;
-        if (qr) {
-          this.mainWindow.webContents.send("bot:qrCode", { botId: bot.Id, qr });
-          bot.Status = Status.LoggedOut;
+      const { connection, lastDisconnect, qr } = update;
+
+      const instance = this.bots.get(bot.Id);
+      if (!instance) return;
+
+      if (qr) {
+        this.mainWindow.webContents.send("bot:qrCode", { botId: bot.Id, qr });
+        bot.Status = Status.LoggedOut;
+        this.mainWindow.webContents.send("bot:statusUpdate", bot);
+      } else {
+        this.mainWindow.webContents.send("bot:qrCode", {
+          botId: bot.Id,
+          qr: "",
+        });
+      }
+
+      /* ------------------------------- CONNECTED ------------------------------ */
+      if (connection === "open") {
+        instance.isConnecting = false;
+        instance.reconnectAttempts = 0;
+
+        auth.creds.me = {
+          id: sock.user!.id,
+          name: sock.user!.name || bot.Campaign || "User",
+        };
+        await updateAuthState(
+          bot.Id,
+          JSON.stringify(auth, BufferJSON.replacer)
+        );
+
+        if (bot.Active) {
+          bot.Status = Status.Online;
           this.mainWindow.webContents.send("bot:statusUpdate", bot);
         } else {
-          this.mainWindow.webContents.send("bot:qrCode", {
-            botId: bot.Id,
-            qr: "",
-          });
+          await this.stopBotInstance(bot.Id);
+          return;
         }
 
-        if (connection === "open") {
-          const instance = this.bots.get(bot.Id);
-          if (bot.Active) {
-            bot.Status = Status.Online;
-            await updateBot(bot);
-            this.mainWindow.webContents.send("bot:statusUpdate", bot);
-          } else {
-            if (instance?.socket) {
-              try {
-                const ws = (instance.socket as any)?.ws;
-                if (ws && (ws.readyState === 1 || ws.readyState === 0)) {
-                  instance.socket.end(undefined);
-                }
-              } catch (err) {
-                console.error(
-                  "Erro ao tentar encerrar socket após conexão aberta:",
-                  err
-                );
-              }
-              instance.socket = null;
-              instance.stop = null;
-              instance.messageQueue = [];
-              instance.bot.Status = Status.Offline;
-              this.mainWindow.webContents.send(
-                "bot:statusUpdate",
-                instance.bot
-              );
-            }
-          }
-          if (botInstance) botInstance.reconnectAttempts = 0;
+        /* ------------ cache and sync groups (max once/10min) ------------ */
+        const now = Date.now();
+        if (
+          !instance.lastGroupFetch ||
+          now - instance.lastGroupFetch > 600_000
+        ) {
+          let groupMetadataCache = await sock.groupFetchAllParticipating();
+          groupMetadataCache = Object.fromEntries(
+            Object.entries(groupMetadataCache).sort(([, a], [, b]) =>
+              (a.subject || "")
+                .toLowerCase()
+                .localeCompare((b.subject || "").toLowerCase())
+            )
+          );
+          instance.groupMetadataCache = groupMetadataCache;
+          instance.lastGroupFetch = now;
+          await this.syncBotGroupsAndMembers(bot.Id, groupMetadataCache);
+        }
+      }
 
-          const now = Date.now();
-          if (
-            !botInstance?.lastGroupFetch ||
-            now - botInstance.lastGroupFetch > 60_000
-          ) {
-            let groupMetadataCache = await sock.groupFetchAllParticipating();
-            groupMetadataCache = Object.fromEntries(
-              Object.entries(groupMetadataCache).sort(([, a], [, b]) => {
-                const subjectA = (a.subject || "").toLowerCase();
-                const subjectB = (b.subject || "").toLowerCase();
-                return subjectA.localeCompare(subjectB);
-              })
-            );
-            if (botInstance) {
-              botInstance.groupMetadataCache = groupMetadataCache;
-              botInstance.lastGroupFetch = now;
-              await this.syncBotGroupsAndMembers(
-                bot.Id,
-                botInstance.groupMetadataCache
-              );
-            }
-          }
+      /* ------------------------------ DISCONNECTED ----------------------------- */
+      if (connection === "close") {
+        const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
+        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+
+        if (statusCode === DisconnectReason.loggedOut) {
+          await clearAuthState(bot.Id);
+          bot.Status = Status.LoggedOut;
+        } else {
+          bot.Status = Status.Disconnected;
         }
 
-        if (connection === "close") {
-          const instance = this.bots.get(bot.Id);
+        this.mainWindow.webContents.send("bot:statusUpdate", bot);
+        instance.isConnecting = false;
+        instance.socket = null;
 
-          if (instance?.isRenaming && instance.newWaNumber) {
-            instance.isRenaming = false;
-            const oldWaNumber = bot.WaNumber;
-            const newWaNumber = instance.newWaNumber;
-            instance.newWaNumber = null;
-
-            const oldAuthDir = path.join(
-              app.getPath("userData"),
-              "auth",
-              oldWaNumber
-            );
-            const newAuthDir = path.join(
-              app.getPath("userData"),
-              "auth",
-              newWaNumber
-            );
-
-            try {
-              if (fs.existsSync(oldAuthDir) && !fs.existsSync(newAuthDir)) {
-                await fsp.rename(oldAuthDir, newAuthDir);
-              }
-              bot.WaNumber = newWaNumber;
-              instance.bot.WaNumber = newWaNumber;
-              await updateBot(bot);
-              this.mainWindow.webContents.send("bot:statusUpdate", bot);
-            } catch (err) {
-              console.error(
-                "❌ Failed to rename auth sub-directory. Restarting bot with old information."
-              );
-            }
-
-            this.startBot(bot);
-            return;
-          }
-
-          const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
-          if (statusCode === DisconnectReason.loggedOut) {
-            const fs = require("fs");
-            const rimraf = require("rimraf");
-            try {
-              if (fs.existsSync(authDir)) {
-                rimraf.sync(authDir);
-              }
-            } catch (err) {
-              console.error("❌ Error removing authentication directory!");
-            }
-            bot.Status = Status.LoggedOut;
-            await updateBot(bot);
-            this.mainWindow.webContents.send("bot:statusUpdate", bot);
-          } else {
-            const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-            bot.Status = Status.Disconnected;
-            await updateBot(bot);
-            this.mainWindow.webContents.send("bot:statusUpdate", bot);
-
-            if (shouldReconnect && !instance?.manualDisconnect && bot.Active) {
-              if (instance) {
-                instance.reconnectAttempts++;
-                if (instance.reconnectAttempts <= 5) {
-                  this.startBot(bot);
-                } else {
-                  setTimeout(() => {
-                    this.startBot(bot);
-                  }, 60000);
-                }
-              } else {
-                this.startBot(bot);
-              }
-            }
-            if (instance) instance.manualDisconnect = false;
-          }
-        }
-      } catch (err) {
-        console.error("❌ Erro no evento connection.update:", err);
-        const instance = this.bots.get(bot.Id);
-        if (instance && !instance.manualDisconnect && instance.bot.Active) {
-          instance.reconnectAttempts++;
-          if (instance.reconnectAttempts <= 5) {
-            this.startBot(bot);
-          } else {
-            setTimeout(() => {
-              this.startBot(bot);
-            }, 60000);
-          }
+        if (!instance.manualDisconnect && bot.Active && shouldReconnect) {
+          instance.reconnectAttempts += 1;
+          const backoff =
+            instance.reconnectAttempts > 5
+              ? 60_000
+              : Math.min(instance.reconnectAttempts, 5) * 5_000;
+          setTimeout(() => this.startBot(bot), backoff);
         }
       }
     });
 
-    sock.ev.on("creds.update", async () => {
-      const botInstance = this.bots.get(bot.Id);
-      if (!botInstance?.bot.Active) {
-        return;
-      }
-      await saveCreds();
+    /* ----------------------------- creds.update ----------------------------- */
+    sock.ev.on("creds.update", async (partialCreds) => {
+      const instance = this.bots.get(bot.Id);
+      if (!instance?.bot.Active) return;
+
+      auth.creds = { ...auth.creds, ...partialCreds } as AuthenticationCreds;
+      await updateAuthState(bot.Id, JSON.stringify(auth, BufferJSON.replacer));
 
       const userNumber = sock.user?.id?.match(/^\d+/)?.[0];
-      const instance = this.bots.get(bot.Id);
-
-      if (
-        userNumber &&
-        bot.WaNumber !== userNumber &&
-        instance &&
-        !instance.isRenaming
-      ) {
-        instance.isRenaming = true;
-        instance.newWaNumber = userNumber;
-        sock.end(undefined);
+      if (userNumber && bot.WaNumber !== userNumber) {
+        bot.WaNumber = userNumber;
+        updateBot(bot);
       }
     });
 
@@ -460,7 +438,16 @@ export class WaManager {
             `Bot está ${Status[bot.Status] || "indefinido"}\n${botInstance?.messageQueue.length ?? 0} mensagens na fila`;
           setTimeout(
             () => {
-              sock.sendMessage(sender, { text: replyMessage }, { quoted: msg });
+              sock.sendMessage(
+                sender,
+                { text: replyMessage },
+                {
+                  quoted: msg,
+                  ephemeralExpiration:
+                    msg.message?.extendedTextMessage?.contextInfo?.expiration ||
+                    undefined,
+                }
+              );
             },
             Math.floor(Math.random() * 1000) + 1000
           );
@@ -474,7 +461,27 @@ export class WaManager {
           processedBufferBase64: string;
         } | null = null;
         if (bot.SendMethod === SendMethods.Image) {
-          imageBufferSet = await this.getImageBufferFromMessageContent(content);
+          // imageBufferSet = await this.getImageBufferFromMessageContent(content);
+          try {
+            const mediaMessage =
+              msg.message?.imageMessage || msg.message?.videoMessage;
+            if (mediaMessage) {
+              const mediaBuffer = await downloadMediaMessage(msg, "buffer", {});
+              if (mediaBuffer) {
+                const processedBuffer = await sharp(mediaBuffer)
+                  .resize({ width: 300, fit: "inside" })
+                  .toBuffer();
+                imageBufferSet = {
+                  processedBuffer,
+                  processedBufferBase64: processedBuffer.toString("base64"),
+                };
+              }
+            }
+          } catch (err) {
+            console.error("❌ Error processing image message:", err);
+            imageBufferSet =
+              await this.getImageBufferFromMessageContent(content);
+          }
         }
 
         const messageObj = new Message(
@@ -501,55 +508,26 @@ export class WaManager {
       }
     });
 
-    if (botInstance) {
-      const groups = await getGroupsByBotId(bot.Id);
-      const broadcastGroupJids = new Set(
-        groups.filter((g) => g.Broadcast).map((g) => g.GroupJid)
-      );
-      botInstance.broadcastGroupJids = broadcastGroupJids;
-      botInstance.bot = bot;
-      botInstance.socket = sock;
-      botInstance.stop = async () => {
-        try {
-          const ws = (sock as any)?.ws;
-          if (ws && (ws.readyState === 1 || ws.readyState === 0)) {
-            sock.end(undefined);
-          }
-        } catch (err) {
-          console.error("Erro ao tentar encerrar o socket:", err);
-        }
-      };
-      botInstance.authorizedNumbers = authorizedNumbers;
-    } else {
-      this.bots.set(bot.Id, {
-        bot,
-        socket: sock,
-        messageQueue: [],
-        stop: async () => {
-          try {
-            const ws = (sock as any)?.ws;
-            if (ws && (ws.readyState === 1 || ws.readyState === 0)) {
-              sock.end(undefined);
-            }
-          } catch (err) {
-            console.error("Erro ao tentar encerrar o socket:", err);
-          }
-        },
-        authorizedNumbers,
-        manualDisconnect: false,
-        groupMetadataCache: null,
-        lastGroupFetch: null,
-        broadcastGroupJids: null,
-        isRenaming: false,
-        newWaNumber: null,
-        reconnectAttempts: 0,
-      });
-    }
+    /* -------------------------- save instance -------------------------- */
+    const groups = await getGroupsByBotId(bot.Id);
+    const broadcastGroupJids = new Set(
+      groups.filter((g) => g.Broadcast).map((g) => g.GroupJid)
+    );
+
+    botInstance.broadcastGroupJids = broadcastGroupJids;
+    botInstance.bot = bot;
+    botInstance.socket = sock;
+    botInstance.stop = async () => {
+      botInstance.manualDisconnect = true;
+      await this.stopBotInstance(bot.Id);
+    };
+    botInstance.authorizedNumbers = authorizedNumbers;
 
     this.ensureBotQueueState(bot.Id);
+    botInstance.isConnecting = false;
   }
 
-  private ensureBotQueueState(botId: number) {
+  public ensureBotQueueState(botId: number) {
     if (!this.botQueueStates.has(botId)) {
       this.botQueueStates.set(botId, {
         paused: false,
@@ -566,10 +544,27 @@ export class WaManager {
       return;
     }
     instance.messageQueue.push(message);
+
+    if (!instance.bot.sendingMessageInfo) {
+      instance.bot.sendingMessageInfo = {
+        content: message.Content?.toString() ?? "",
+        currentGroup: "",
+        currentGroupIndex: 0,
+        totalGroups: 0,
+        queueLength: instance.messageQueue.length,
+      };
+    } else {
+      instance.bot.sendingMessageInfo.queueLength =
+        instance.messageQueue.length;
+    }
+
+    this.mainWindow.webContents.send("bot:statusUpdate", instance.bot);
+
     this.mainWindow.webContents.send("bot:messageQueueUpdate", {
       botId,
       messageQueue: instance.messageQueue,
     });
+
     this.processQueue(botId);
   }
 
@@ -587,7 +582,7 @@ export class WaManager {
     this.processQueue(botId);
   }
 
-  private async processQueue(botId: number) {
+  public async processQueue(botId: number) {
     this.ensureBotQueueState(botId);
     const state = this.botQueueStates.get(botId)!;
     const instance = this.bots.get(botId);
@@ -604,16 +599,12 @@ export class WaManager {
     }
 
     instance.bot.Status = Status.Sending;
-    await updateBot(instance.bot);
     this.mainWindow.webContents.send("bot:statusUpdate", instance.bot);
 
     state.sending = true;
 
-    while (
-      !state.paused &&
-      state.currentMessageIndex < instance.messageQueue.length
-    ) {
-      const message = instance.messageQueue[state.currentMessageIndex];
+    while (!state.paused && instance.messageQueue.length > 0) {
+      const message = instance.messageQueue[0];
       const broadcastSet = instance.broadcastGroupJids;
       const groupIds = Object.keys(instance.groupMetadataCache);
 
@@ -639,8 +630,14 @@ export class WaManager {
             instance.groupMetadataCache[groupJid]?.subject || groupJid,
           currentGroupIndex,
           totalGroups,
+          queueLength: instance.messageQueue.length,
         };
         this.mainWindow.webContents.send("bot:statusUpdate", instance.bot);
+
+        this.mainWindow.webContents.send("bot:messageQueueUpdate", {
+          botId,
+          messageQueue: instance.messageQueue,
+        });
 
         try {
           if (
@@ -669,12 +666,12 @@ export class WaManager {
 
       if (!state.paused) {
         state.currentGroupIndex = 0;
-        state.currentMessageIndex++;
+        instance.messageQueue.splice(0, 1);
         this.mainWindow.webContents.send("bot:messageQueueUpdate", {
           botId,
-          messageQueue: instance.messageQueue.slice(state.currentMessageIndex),
+          messageQueue: instance.messageQueue,
         });
-        if (state.currentMessageIndex < instance.messageQueue.length) {
+        if (instance.messageQueue.length > 0) {
           await delay((instance.bot.DelayBetweenMessages ?? 0) * 1000, 1000);
         }
       }
@@ -687,13 +684,16 @@ export class WaManager {
       instance.messageQueue = [];
       state.currentMessageIndex = 0;
       state.currentGroupIndex = 0;
-      this.mainWindow.webContents.send("bot:messageQueueUpdate", {
-        botId,
-        messageQueue: [],
-      });
+
+      instance.bot.sendingMessageInfo = {
+        content: "",
+        currentGroup: "",
+        currentGroupIndex: 0,
+        totalGroups: 0,
+        queueLength: 0,
+      };
 
       instance.bot.Status = Status.Online;
-      await updateBot(instance.bot);
       this.mainWindow.webContents.send("bot:statusUpdate", instance.bot);
     }
 
@@ -704,16 +704,20 @@ export class WaManager {
     return Array.from(this.bots.values()).map((b) => b.bot);
   }
 
-  async updateBotMemoryState(
+  public async updateBotMemoryState(
     botId: number,
     patch: Partial<Bot>
   ): Promise<Bot | null> {
     const instance = this.bots.get(botId);
-    if (!instance) return null;
+    if (!instance) {
+      console.error(`❌ Bot instance for ID ${botId} not found.`);
+      return null;
+    }
 
     const prevActive = instance.bot.Active;
     const prevPaused = instance.bot.Paused;
     const prevStatus = instance.bot.Status;
+    const prevWaNumber = instance.bot.WaNumber;
 
     Object.assign(instance.bot, patch);
 
@@ -723,25 +727,26 @@ export class WaManager {
       );
     }
 
+    if (patch.WaNumber && patch.WaNumber !== prevWaNumber) {
+      const { clearAuthState } = await import("./db-commands");
+      await clearAuthState(botId);
+
+      if (instance.socket) {
+        await instance.stop?.();
+      }
+    }
+
     if (typeof patch.Active === "undefined") instance.bot.Active = prevActive;
     if (typeof patch.Paused === "undefined") instance.bot.Paused = prevPaused;
     if (typeof patch.Status === "undefined") instance.bot.Status = prevStatus;
 
     if (patch.Active === true && !instance.socket) {
-      this.startBot(instance.bot);
-    }
-    if (patch.Active === false && instance.socket) {
-      instance.manualDisconnect = true;
-      await instance.stop?.();
-      instance.socket = null;
-      instance.messageQueue = [];
-      instance.stop = null;
-      instance.reconnectAttempts = 0;
+      await this.startBot(instance.bot);
+    } else if (patch.Active === false) {
       instance.bot.Status = Status.Offline;
-      this.mainWindow.webContents.send("bot:qrCode", {
-        botId: instance.bot.Id,
-        qr: "",
-      });
+      if (instance.socket) {
+        await instance.stop?.();
+      }
     }
 
     this.mainWindow.webContents.send("bot:statusUpdate", instance.bot);
@@ -758,6 +763,7 @@ export class WaManager {
     if (!instance || idx <= 0 || idx >= instance.messageQueue.length) return;
     const arr = instance.messageQueue;
     [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
+
     this.mainWindow.webContents.send("bot:messageQueueUpdate", {
       botId,
       messageQueue: arr,
@@ -769,6 +775,7 @@ export class WaManager {
     if (!instance || idx < 0 || idx >= instance.messageQueue.length - 1) return;
     const arr = instance.messageQueue;
     [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
+
     this.mainWindow.webContents.send("bot:messageQueueUpdate", {
       botId,
       messageQueue: arr,
@@ -779,13 +786,20 @@ export class WaManager {
     const instance = this.bots.get(botId);
     if (!instance || idx < 0 || idx >= instance.messageQueue.length) return;
     instance.messageQueue.splice(idx, 1);
+
+    if (instance.bot.sendingMessageInfo) {
+      instance.bot.sendingMessageInfo.queueLength =
+        instance.messageQueue.length;
+      this.mainWindow.webContents.send("bot:statusUpdate", instance.bot);
+    }
+
     this.mainWindow.webContents.send("bot:messageQueueUpdate", {
       botId,
       messageQueue: instance.messageQueue,
     });
   }
 
-  async getImageBufferFromMessageContent(content: string): Promise<{
+  public async getImageBufferFromMessageContent(content: string): Promise<{
     processedBuffer: Buffer;
     processedBufferBase64: string;
   } | null> {
@@ -820,14 +834,49 @@ export class WaManager {
       return null;
     }
   }
+
+  /* --------------------------- stopBotInstance --------------------------- */
+  public async stopBotInstance(botId: number) {
+    const instance = this.bots.get(botId);
+    if (!instance) {
+      return;
+    }
+
+    this.pauseQueue(botId);
+
+    try {
+      if (instance.socket) {
+        instance.socket.end(new Error("manual"));
+      }
+    } catch (err) {
+      console.error("❌ Error trying to access socket:", err);
+    }
+
+    instance.socket = null;
+    instance.isConnecting = false;
+    instance.manualDisconnect = false;
+
+    instance.messageQueue = [];
+    instance.reconnectAttempts = 0;
+    this.mainWindow.webContents.send("bot:messageQueueUpdate", {
+      botId,
+      messageQueue: [],
+    });
+
+    instance.bot.Status = Status.Offline;
+    this.mainWindow.webContents.send("bot:statusUpdate", instance.bot);
+
+    this.mainWindow.webContents.send("bot:qrCode", {
+      botId: instance.bot.Id,
+      qr: "",
+    });
+  }
 }
 
+/* -------------------------- singleton export ------------------------- */
 let waManager: WaManager | null = null;
-
 export function getWaManager(mainWindow?: Electron.BrowserWindow) {
-  if (!waManager && mainWindow) {
-    waManager = new WaManager(mainWindow);
-  }
+  if (!waManager && mainWindow) waManager = new WaManager(mainWindow);
   return waManager!;
 }
 

@@ -235,7 +235,7 @@ const BotDetailsPage: React.FC<BotDetailsProps> = ({
               type="text"
               className="rounded border bg-white px-2 py-2 font-bold text-whatsapp-teal dark:bg-gray-800 dark:text-gray-100"
               placeholder="Ex: 553499991111 (opcional, atribuído automaticamente)"
-              value={formData.WaNumber}
+              value={formData.WaNumber ?? ""}
               onChange={handleChange}
             />
           </div>

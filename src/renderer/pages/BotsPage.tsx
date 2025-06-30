@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import BotCard from "../components/BotCard";
 import { Bot } from "../../models/bot-model";
-import { Status } from "../../models/bot-options-model";
 
 interface BotsProps {
   onBotDetails: (bot: Bot) => void;
@@ -21,9 +20,6 @@ const BotsPage: React.FC<BotsProps> = ({
   const [qrCodes, setQrCodes] = useState<{ [botId: number]: string }>({});
   const [groupStats, setGroupStats] = useState<{
     [botId: number]: { broadcastGroups: number; broadcastMembers: number };
-  }>({});
-  const [messageQueues, setMessageQueues] = useState<{
-    [botId: number]: any[];
   }>({});
 
   const fetchGroupStats = useCallback(
@@ -103,17 +99,10 @@ const BotsPage: React.FC<BotsProps> = ({
       }
     );
 
-    const removeQueueListener = window.appApi.onMessageQueueUpdate(
-      ({ botId, messageQueue }) => {
-        setMessageQueues((prev) => ({ ...prev, [botId]: messageQueue }));
-      }
-    );
-
     return () => {
       removeStatusUpdateListener();
       removeQrCodeListener();
       removeStatsListener();
-      removeQueueListener();
     };
   }, []);
 
@@ -182,13 +171,6 @@ const BotsPage: React.FC<BotsProps> = ({
                 onShowGroups={onShowGroups}
                 onShowMessages={onShowMessages}
                 groupStats={groupStats[bot.Id]}
-                queueLength={
-                  (messageQueues[bot.Id]?.length || 0) -
-                  (bot.Status === Status.Sending &&
-                  messageQueues[bot.Id]?.length > 0
-                    ? 1
-                    : 0)
-                }
               />
             ))
           ) : (
