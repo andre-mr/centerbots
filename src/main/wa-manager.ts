@@ -42,6 +42,7 @@ import {
   clearAuthState,
   deleteOrphanMembers,
   deleteOrphanGroups,
+  getGroupIdByJid,
 } from "./db-commands";
 import pino from "pino";
 import { Message } from "../models/message-model";
@@ -152,13 +153,26 @@ export class WaManager {
           groupId = await createGroup(
             new Group(0, groupJid, meta.subject, meta.size)
           );
+          if (!groupId) {
+            const existingId = await getGroupIdByJid(groupJid);
+            if (!existingId) {
+              console.error(
+                `❌ Failed to create group ${groupJid} and no existing group found! Skipping this group.`
+              );
+              continue;
+            } else {
+              groupId = existingId;
+            }
+          }
         } else {
           groupId = localGroup.Id;
           await updateGroup(
             new Group(groupId, groupJid, meta.subject, meta.size)
           );
         }
-        await createBotGroup(botId, groupId, 0);
+        if (groupId > 0) {
+          await createBotGroup(botId, groupId, 0);
+        }
 
         const localMembers = await getMembersByGroupId(groupId);
         const serverMemberJids = new Set(
@@ -663,14 +677,24 @@ export class WaManager {
         }
         if (state.paused) break;
       }
-      if (!state.paused) {
-        instance.bot.sendingMessageInfo = undefined;
-        this.mainWindow.webContents.send("bot:statusUpdate", instance.bot);
-      }
 
       if (!state.paused) {
+        instance.bot.sendingMessageInfo = {
+          content: "",
+          currentGroup: "",
+          currentGroupIndex: 0,
+          totalGroups: 0,
+          queueLength: instance.messageQueue.length,
+        };
         state.currentGroupIndex = 0;
-        instance.messageQueue.splice(0, 1);
+        if (
+          instance.messageQueue.length > 0 &&
+          instance.messageQueue[0] === message
+        ) {
+          instance.messageQueue.splice(0, 1);
+          instance.bot.sendingMessageInfo.queueLength--;
+        }
+        this.mainWindow.webContents.send("bot:statusUpdate", instance.bot);
         this.mainWindow.webContents.send("bot:messageQueueUpdate", {
           botId,
           messageQueue: instance.messageQueue,
@@ -764,7 +788,13 @@ export class WaManager {
 
   moveMessageUp(botId: number, idx: number) {
     const instance = this.bots.get(botId);
-    if (!instance || idx <= 0 || idx >= instance.messageQueue.length) return;
+    if (
+      !instance ||
+      instance.messageQueue.length < 3 ||
+      idx <= 1 ||
+      idx >= instance.messageQueue.length
+    )
+      return;
     const arr = instance.messageQueue;
     [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
 
@@ -776,7 +806,13 @@ export class WaManager {
 
   moveMessageDown(botId: number, idx: number) {
     const instance = this.bots.get(botId);
-    if (!instance || idx < 0 || idx >= instance.messageQueue.length - 1) return;
+    if (
+      !instance ||
+      instance.messageQueue.length < 3 ||
+      idx <= 0 ||
+      idx >= instance.messageQueue.length - 1
+    )
+      return;
     const arr = instance.messageQueue;
     [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
 
@@ -790,6 +826,19 @@ export class WaManager {
     const instance = this.bots.get(botId);
     if (!instance || idx < 0 || idx >= instance.messageQueue.length) return;
     instance.messageQueue.splice(idx, 1);
+
+    if (idx === 0) {
+      const state = this.botQueueStates.get(botId);
+      if (state && instance.groupMetadataCache) {
+        state.currentGroupIndex = Object.keys(
+          instance.groupMetadataCache
+        ).length;
+      }
+    }
+
+    if (instance.messageQueue.length === 0) {
+      instance.bot.Status = Status.Online;
+    }
 
     if (instance.bot.sendingMessageInfo) {
       instance.bot.sendingMessageInfo.queueLength =

@@ -212,6 +212,16 @@ export async function getGroupById(id: number): Promise<Group | null> {
   );
 }
 
+export async function getGroupIdByJid(groupJid: string): Promise<number | null> {
+  const sql = `
+    SELECT
+      g.id
+    FROM groups AS g
+    WHERE g.group_jid = ?
+  `;
+  return get<{ id: number }>(sql, [groupJid]).then((row) => row?.id ?? null);
+}
+
 export async function getAllGroups(): Promise<Group[]> {
   const sql = `
     SELECT

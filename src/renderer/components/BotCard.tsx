@@ -202,7 +202,8 @@ const BotCard: React.FC<
       }
 
       <div className="flex flex-col gap-1 border-t px-2 py-1 dark:border-gray-700">
-        {bot.sendingMessageInfo && bot.sendingMessageInfo.queueLength ? (
+        {bot.sendingMessageInfo?.currentGroup &&
+        bot.sendingMessageInfo.queueLength > 0 ? (
           <div className="truncate text-xs italic text-gray-700 dark:text-gray-300">
             {bot.sendingMessageInfo.content.slice(0, 240)}
           </div>
@@ -214,7 +215,7 @@ const BotCard: React.FC<
         <div className="flex items-center gap-2 rounded bg-blue-50 p-1 dark:bg-slate-700">
           <span className="truncate text-xs text-blue-600 dark:text-blue-300">
             {bot.sendingMessageInfo?.currentGroup &&
-            bot.sendingMessageInfo.queueLength
+            bot.sendingMessageInfo.queueLength > 0
               ? bot.sendingMessageInfo.currentGroup
               : "\u00A0"}
           </span>
@@ -223,7 +224,8 @@ const BotCard: React.FC<
               className="h-2 rounded bg-blue-500 transition-all dark:bg-blue-400"
               style={{
                 width: `${
-                  bot.sendingMessageInfo && bot.sendingMessageInfo.queueLength
+                  bot.sendingMessageInfo?.currentGroup &&
+                  bot.sendingMessageInfo.queueLength > 0
                     ? Math.max(
                         0,
                         Math.min(
@@ -239,7 +241,7 @@ const BotCard: React.FC<
             />
           </div>
           <span className="ml-2 text-xs text-blue-600 dark:text-blue-300">
-            {bot.sendingMessageInfo &&
+            {bot.sendingMessageInfo?.currentGroup &&
             bot.sendingMessageInfo.queueLength > 0 ? (
               <>
                 {(bot.sendingMessageInfo.currentGroupIndex ?? 0) + 1} /{" "}
