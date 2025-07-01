@@ -48,7 +48,7 @@ const HelpPage: React.FC = () => {
             <span className="rounded bg-gray-100 px-1 font-mono dark:bg-gray-800">
               Adicionar Bot
             </span>
-            . Após salvar, ative-o e leia o QR Code com o WhatsApp do número que
+            . Após salvar, ative-o e leia o QR Code pelo WhatsApp da conta que
             será o bot.
           </li>
           <li>
@@ -65,12 +65,13 @@ const HelpPage: React.FC = () => {
               Grupos
             </span>{" "}
             e marque todos os grupos para os quais este bot deverá enviar as
-            mensagens.
+            mensagens. O carregamento de todos os grupos pode levar um tempo
+            após ativação.
           </li>
           <li>
-            <b>Iniciar um envio:</b> Usando um dos <b>números autorizados</b>,
-            envie uma mensagem (texto, imagem, etc.) para o número do bot no seu
-            WhatsApp.
+            <b>Iniciar um envio:</b> Usando o WhatsApp de um dos números
+            autorizados, envie uma mensagem (texto ou imagem) para o número do
+            bot.
           </li>
           <li>
             <b>Acompanhar o processo:</b> O CenterBots irá detectar a mensagem,
@@ -79,7 +80,14 @@ const HelpPage: React.FC = () => {
             <span className="rounded bg-gray-100 px-1 font-mono dark:bg-gray-800">
               Mensagens
             </span>
-            .
+            . Após a ativação por QR Code, caso o bot não fique online no
+            celular, ou não responda a mensagem, desative-o e reinicie a
+            aplicação para realizar uma nova conexão com os servidores do
+            WhatsApp após a autorização do dispositivo. Envie a mensagem{" "}
+            <b>status</b> para o bot a partir do WhatsApp de um dos números
+            autorizados, ele deve responder em alguns segundos, desde que a
+            origem das mensagens nas configurações estja <b>Todas</b> ou{" "}
+            <b>Privadas</b>.
           </li>
         </ol>
       </section>
@@ -132,8 +140,8 @@ const HelpPage: React.FC = () => {
           <li className="flex items-center gap-2">
             <MdHighlightOff className="animate-pulse text-2xl text-yellow-500 dark:text-yellow-400" />
             <span>
-              <b>Desconectado:</b> O bot perdeu a conexão com o WhatsApp e está
-              tentando se reconectar.
+              <b>Desconectado:</b> O bot perdeu a conexão com os servidores do
+              WhatsApp e está tentando se reconectar.
             </span>
           </li>
           <li className="flex items-center gap-2">

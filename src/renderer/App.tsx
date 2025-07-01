@@ -280,13 +280,13 @@ const App: React.FC = () => {
             </p>
             <div className="flex justify-between gap-2">
               <button
-                className="rounded bg-gray-200 px-4 py-2"
+                className="w-60 rounded bg-gray-200 px-4 py-2"
                 onClick={() => setShowUpdateModal(false)}
               >
-                Cancelar
+                Cancelar e atualizar depois
               </button>
               <button
-                className="rounded bg-emerald-600 px-4 py-2 text-white"
+                className="w-60 rounded bg-emerald-600 px-4 py-2 text-white"
                 onClick={handleUpdateConfirm}
               >
                 Reiniciar e atualizar agora

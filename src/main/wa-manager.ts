@@ -461,7 +461,6 @@ export class WaManager {
           processedBufferBase64: string;
         } | null = null;
         if (bot.SendMethod === SendMethods.Image) {
-          // imageBufferSet = await this.getImageBufferFromMessageContent(content);
           try {
             const mediaMessage =
               msg.message?.imageMessage || msg.message?.videoMessage;
@@ -475,10 +474,15 @@ export class WaManager {
                   processedBuffer,
                   processedBufferBase64: processedBuffer.toString("base64"),
                 };
+              } else {
+                imageBufferSet =
+                  await this.getImageBufferFromMessageContent(content);
               }
+            } else {
+              imageBufferSet =
+                await this.getImageBufferFromMessageContent(content);
             }
           } catch (err) {
-            console.error("❌ Error processing image message:", err);
             imageBufferSet =
               await this.getImageBufferFromMessageContent(content);
           }

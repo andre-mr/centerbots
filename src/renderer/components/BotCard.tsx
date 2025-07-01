@@ -223,9 +223,7 @@ const BotCard: React.FC<
               className="h-2 rounded bg-blue-500 transition-all dark:bg-blue-400"
               style={{
                 width: `${
-                  bot.sendingMessageInfo &&
-                  bot.sendingMessageInfo.queueLength &&
-                  bot.sendingMessageInfo.currentGroupIndex >= 1
+                  bot.sendingMessageInfo && bot.sendingMessageInfo.queueLength
                     ? Math.max(
                         0,
                         Math.min(
