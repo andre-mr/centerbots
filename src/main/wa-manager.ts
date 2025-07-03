@@ -142,8 +142,8 @@ export class WaManager {
   ) {
     await beginTransaction();
     try {
-      const localGroups = await getGroupsByBotId(botId);
       const serverGroupJids = new Set(Object.keys(serverGroupsMetadata));
+      const localGroups = await getGroupsByBotId(botId);
 
       for (const groupJid of serverGroupJids) {
         const meta = serverGroupsMetadata[groupJid];
@@ -156,13 +156,9 @@ export class WaManager {
           if (!groupId) {
             const existingId = await getGroupIdByJid(groupJid);
             if (!existingId) {
-              console.error(
-                `❌ Failed to create group ${groupJid} and no existing group found! Skipping this group.`
-              );
               continue;
-            } else {
-              groupId = existingId;
             }
+            groupId = existingId;
           }
         } else {
           groupId = localGroup.Id;
@@ -172,6 +168,8 @@ export class WaManager {
         }
         if (groupId > 0) {
           await createBotGroup(botId, groupId, 0);
+        } else {
+          continue;
         }
 
         const localMembers = await getMembersByGroupId(groupId);

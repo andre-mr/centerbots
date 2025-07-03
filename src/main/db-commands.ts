@@ -170,8 +170,12 @@ export async function createGroup(group: Group): Promise<number> {
     INSERT OR IGNORE INTO groups (group_jid, name)
     VALUES (?, ?)
   `;
-  const { lastID } = await run(sql, [group.GroupJid, group.Name]);
-  return lastID;
+  try {
+    const { lastID, changes } = await run(sql, [group.GroupJid, group.Name]);
+    return changes > 0 ? lastID : 0;
+  } catch (err) {
+    throw err;
+  }
 }
 
 export async function updateGroup(group: Group): Promise<void> {
@@ -212,7 +216,9 @@ export async function getGroupById(id: number): Promise<Group | null> {
   );
 }
 
-export async function getGroupIdByJid(groupJid: string): Promise<number | null> {
+export async function getGroupIdByJid(
+  groupJid: string
+): Promise<number | null> {
   const sql = `
     SELECT
       g.id
@@ -808,8 +814,12 @@ export async function createBotGroup(
     INSERT OR IGNORE INTO bot_groups (bot_id, group_id, broadcast)
     VALUES (?, ?, ?)
   `;
-  const { lastID } = await run(sql, [botId, groupId, broadcast]);
-  return lastID;
+  try {
+    const { lastID, changes } = await run(sql, [botId, groupId, broadcast]);
+    return changes > 0 ? lastID : 0;
+  } catch (err) {
+    throw err;
+  }
 }
 
 export async function getBotGroupsByBotId(botId: number): Promise<BotGroup[]> {
@@ -875,8 +885,12 @@ export async function createGroupMember(
     INSERT OR IGNORE INTO group_members (group_id, member_id, is_admin)
     VALUES (?, ?, ?)
   `;
-  const { lastID } = await run(sql, [groupId, memberId, isAdmin ? 1 : 0]);
-  return lastID;
+  const { lastID, changes } = await run(sql, [
+    groupId,
+    memberId,
+    isAdmin ? 1 : 0,
+  ]);
+  return changes > 0 ? lastID : 0;
 }
 
 export async function purgeOldMessages(days: number = 30): Promise<number> {

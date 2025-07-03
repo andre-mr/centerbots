@@ -53,8 +53,16 @@ const BotMessage: React.FC<BotMessageProps> = ({
   return (
     <div
       key={msg.Id || idx}
-      className={`mb-2 flex flex-col gap-1 rounded border-b border-gray-200 p-1 text-sm shadow last:border-0 dark:border-gray-700 ${isFirst ? "bg-emerald-50 ring-2 ring-emerald-400 ring-opacity-60 dark:bg-emerald-950" : ""} `}
+      className={
+        `mb-2 flex flex-col gap-1 rounded border-b border-gray-200 p-1 text-sm shadow last:border-0 dark:border-gray-700 ` +
+        `${isFirst ? "relative overflow-hidden bg-emerald-50 ring-2 ring-emerald-400 ring-opacity-60 dark:bg-emerald-950" : ""} `
+      }
     >
+      {isFirst && (
+        <div className="absolute left-0 top-0 h-0.5 w-full overflow-hidden">
+          <div className="animate-progressBar h-full origin-left bg-emerald-300"></div>
+        </div>
+      )}
       <div className="flex flex-row items-center gap-4 text-gray-800 dark:text-gray-200">
         <span className="whitespace-nowrap font-bold">{dateStr}</span>
         <span className="whitespace-nowrap font-semibold text-green-700 dark:text-green-400">
