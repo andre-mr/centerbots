@@ -85,6 +85,7 @@ export class WaManager {
   public mainWindow: Electron.BrowserWindow;
   public bots: Map<number, BotInstance> = new Map();
   public botQueueStates: Map<number, BotQueueState> = new Map();
+  private syncLock: boolean = false; // lock global
 
   constructor(mainWindow: Electron.BrowserWindow) {
     this.mainWindow = mainWindow;
@@ -138,10 +139,30 @@ export class WaManager {
 
   async syncBotGroupsAndMembers(
     botId: number,
-    serverGroupsMetadata: Record<string, any>
+    serverGroupsMetadata: Record<string, any>,
+    attempt: number = 1
   ) {
-    await beginTransaction();
+    const MAX_ATTEMPTS = 100;
+    if (this.syncLock) {
+      if (attempt > MAX_ATTEMPTS) {
+        return;
+      }
+      const delayMs = 1000 + Math.floor(Math.random() * 5000);
+      setTimeout(
+        () =>
+          this.syncBotGroupsAndMembers(
+            botId,
+            serverGroupsMetadata,
+            attempt + 1
+          ),
+        delayMs
+      );
+      return;
+    }
+
+    this.syncLock = true;
     try {
+      await beginTransaction();
       const serverGroupJids = new Set(Object.keys(serverGroupsMetadata));
       const localGroups = await getGroupsByBotId(botId);
 
@@ -210,6 +231,8 @@ export class WaManager {
       );
       await rollbackTransaction();
       throw err;
+    } finally {
+      this.syncLock = false;
     }
   }
 

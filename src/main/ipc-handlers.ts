@@ -4,7 +4,7 @@ import {
   getGroupsByBotId,
   updateBot,
   deleteBot,
-  createBot as dbCreateBot,
+  createBot,
   getAppSettings,
   updateAppSettings,
   getBotGroupsAndMembers,
@@ -12,6 +12,7 @@ import {
   updateBotGroupsBroadcast,
   getBotById,
   getGlobalStats,
+  getMessagesByPeriod,
 } from "./db-commands";
 import { Bot } from "../models/bot-model";
 import { getWaManager } from "./wa-manager";
@@ -48,7 +49,7 @@ export function setupIpcHandlers() {
       );
     }
 
-    const lastInsertedId = await dbCreateBot(bot);
+    const lastInsertedId = await createBot(bot);
     const waManager = getWaManager();
     const createdBot = await getBotById(lastInsertedId);
     if (createdBot) {
@@ -199,7 +200,6 @@ export function setupIpcHandlers() {
   ipcMain.handle(
     "messages:getByPeriod",
     async (_event, from: string, to: string, botId?: number) => {
-      const { getMessagesByPeriod } = await import("./db-commands");
       return getMessagesByPeriod(from, to, botId);
     }
   );
