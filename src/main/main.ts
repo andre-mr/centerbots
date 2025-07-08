@@ -91,7 +91,9 @@ function setupAutoUpdater(win: BrowserWindow) {
   autoUpdater.checkForUpdates();
 
   ipcMain.on("confirm-update-install", () => {
-    autoUpdater.quitAndInstall();
+    setImmediate(() => {
+      autoUpdater.quitAndInstall();
+    });
   });
 }
 
@@ -142,7 +144,12 @@ if (!gotTheLock) {
     });
 
     app.on("activate", function () {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+      if (BrowserWindow.getAllWindows().length === 0) {
+        mainWindow = createWindow();
+      } else if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.focus();
+      }
     });
   });
 

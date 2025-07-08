@@ -1003,12 +1003,12 @@ export async function getGlobalStats(
 }
 
 export async function getDatabaseBackup(): Promise<{
-  bots: any[];
-  authorized_numbers: any[];
-  groups: number;
-  bot_groups: number;
-  members: number;
-  messages: number;
+  Bots: any[];
+  AuthorizedNumbers: any[];
+  Groups: number;
+  BotGroups: number;
+  Members: number;
+  Messages: number;
 }> {
   const bots = await all<{
     id: number;
@@ -1038,26 +1038,26 @@ export async function getDatabaseBackup(): Promise<{
     FROM bots`
   );
   const authorizedNumbers = await all<any>(`SELECT * FROM authorized_numbers`);
-  const [{ count: groups }] = await all<{ count: number }>(
+  const [{ count: Groups }] = await all<{ count: number }>(
     `SELECT COUNT(*) as count FROM groups`
   );
-  const [{ count: bot_groups }] = await all<{ count: number }>(
+  const [{ count: BotGroups }] = await all<{ count: number }>(
     `SELECT COUNT(*) as count FROM bot_groups WHERE broadcast = 1`
   );
-  const [{ count: members }] = await all<{ count: number }>(
+  const [{ count: Members }] = await all<{ count: number }>(
     `SELECT COUNT(*) as count FROM members`
   );
-  const [{ count: messages }] = await all<{ count: number }>(
+  const [{ count: Messages }] = await all<{ count: number }>(
     `SELECT COUNT(*) as count FROM messages`
   );
 
   return {
-    bots: bots.map(b => ({ ...b, link_required: !!b.link_required })),
-    authorized_numbers: authorizedNumbers,
-    groups,
-    bot_groups,
-    members,
-    messages,
+    Bots: bots.map((b) => ({ ...b, link_required: !!b.link_required })),
+    AuthorizedNumbers: authorizedNumbers,
+    Groups,
+    BotGroups,
+    Members,
+    Messages,
   };
 }
 
