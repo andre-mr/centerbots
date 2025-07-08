@@ -42,6 +42,7 @@ const App: React.FC = () => {
       "Novo Bot",
       WhatsAppSources.Direct,
       SendMethods.Forward,
+      false,
       2,
       10,
       LinkParameters.None,

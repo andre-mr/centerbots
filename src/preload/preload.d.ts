@@ -54,6 +54,7 @@ interface ExposedApi {
   ) => Promise<Message[]>;
   moveMessageUp: (botId: number, idx: number) => Promise<void>;
   moveMessageDown: (botId: number, idx: number) => Promise<void>;
+  moveMessageToTop: (botId: number, idx: number) => Promise<void>;
   deleteMessageFromQueue: (botId: number, idx: number) => Promise<void>;
   getGlobalStats: () => Promise<GlobalStats>;
 

@@ -347,9 +347,32 @@ const BotDetailsPage: React.FC<BotDetailsProps> = ({
           <div className="flex flex-col gap-1">
             <label
               className="font-semibold text-gray-700 dark:text-gray-200"
+              htmlFor="linkRequired"
+            >
+              Somente com links
+            </label>
+            <select
+              id="linkRequired"
+              name="LinkRequired"
+              className="rounded border bg-white px-1.5 py-2 dark:bg-gray-800 dark:text-gray-100"
+              value={formData.LinkRequired ? "true" : "false"}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  LinkRequired: e.target.value === "true",
+                }))
+              }
+            >
+              <option value="true">Ativado</option>
+              <option value="false">Desativado</option>
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label
+              className="font-semibold text-gray-700 dark:text-gray-200"
               htmlFor="linkParameters"
             >
-              Parâmetros de links
+              Adicionar parâmetros
             </label>
             <select
               id="linkParameters"

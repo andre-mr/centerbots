@@ -13,6 +13,7 @@ export class Bot {
     public Campaign: string | null,
     public WhatsAppSources: WhatsAppSources,
     public SendMethod: SendMethods,
+    public LinkRequired: boolean,
     public DelayBetweenGroups: number,
     public DelayBetweenMessages: number,
     public LinkParameters: LinkParameters,

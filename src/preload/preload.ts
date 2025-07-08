@@ -26,6 +26,8 @@ const exposedApi = {
     ipcRenderer.invoke("bots:moveMessageUp", botId, idx),
   moveMessageDown: (botId: number, idx: number) =>
     ipcRenderer.invoke("bots:moveMessageDown", botId, idx),
+  moveMessageToTop: (botId: number, idx: number) =>
+    ipcRenderer.invoke("bots:moveMessageToTop", botId, idx),
   deleteMessageFromQueue: (botId: number, idx: number) =>
     ipcRenderer.invoke("bots:deleteMessageFromQueue", botId, idx),
   getGlobalStats: () => ipcRenderer.invoke("stats:getGlobal"),

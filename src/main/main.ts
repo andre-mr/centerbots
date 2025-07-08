@@ -8,6 +8,7 @@ import { ipcMain } from "electron";
 import cron from "node-cron";
 import { purgeOldMessages } from "./db-commands";
 import { checkLicense } from "./license-manager";
+import { dbReady } from "./db-connection";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -48,13 +49,19 @@ function createWindow(): BrowserWindow {
     }
 
     event.preventDefault();
-    const { ipcMain } = require("electron");
+
+    if (mainWindow?.webContents?.isDestroyed()) {
+      return;
+    }
+
     mainWindow.webContents.send("app:confirm-exit");
+
     const shouldClose = await new Promise<boolean>((resolve) => {
       ipcMain.once("app:confirm-exit-response", (_evt, result) => {
         resolve(result);
       });
     });
+
     if (shouldClose) {
       mainWindow.destroy();
     }
@@ -104,6 +111,8 @@ if (!gotTheLock) {
     electronApp.setAppUserModelId("com.electron");
 
     mainWindow = createWindow();
+
+    await dbReady;
 
     checkLicense(import.meta.env.MAIN_VITE_API_URL || "", mainWindow!);
 

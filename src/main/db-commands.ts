@@ -557,16 +557,17 @@ export async function getMessagesByPeriod(
 export async function createBot(bot: Bot): Promise<number> {
   const sql = `
     INSERT INTO bots (
-      wa_number, campaign, whatsapp_sources, send_method, delay_between_groups, 
-      delay_between_messages, link_parameters, updated, proxy
+      wa_number, campaign, whatsapp_sources, send_method, link_required,
+      delay_between_groups, delay_between_messages, link_parameters, updated, proxy
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
   const { lastID } = await run(sql, [
     bot.WaNumber || null,
     bot.Campaign,
     bot.WhatsAppSources,
     bot.SendMethod,
+    +bot.LinkRequired,
     bot.DelayBetweenGroups,
     bot.DelayBetweenMessages,
     bot.LinkParameters,
@@ -586,6 +587,7 @@ export async function updateBot(bot: Bot): Promise<void> {
            campaign = ?,
            whatsapp_sources = ?,
            send_method = ?,
+           link_required = ?,
            delay_between_groups = ?,
            delay_between_messages = ?,
            link_parameters = ?,
@@ -598,6 +600,7 @@ export async function updateBot(bot: Bot): Promise<void> {
     bot.Campaign,
     bot.WhatsAppSources,
     bot.SendMethod,
+    +bot.LinkRequired,
     bot.DelayBetweenGroups,
     bot.DelayBetweenMessages,
     bot.LinkParameters,
@@ -623,6 +626,7 @@ export async function getBotById(id: number): Promise<Bot | null> {
       b.campaign,
       b.whatsapp_sources,
       b.send_method,
+      b.link_required,
       b.delay_between_groups,
       b.delay_between_messages,
       b.link_parameters,
@@ -646,6 +650,7 @@ export async function getBotById(id: number): Promise<Bot | null> {
     campaign: string | null;
     whatsapp_sources: string;
     send_method: string;
+    link_required: number;
     delay_between_groups: number;
     delay_between_messages: number;
     link_parameters: string | null;
@@ -664,6 +669,7 @@ export async function getBotById(id: number): Promise<Bot | null> {
         row.campaign,
         row.whatsapp_sources as WhatsAppSources,
         row.send_method as SendMethods,
+        !!row.link_required,
         row.delay_between_groups,
         row.delay_between_messages,
         row.link_parameters as LinkParameters,
@@ -686,6 +692,7 @@ export async function getAllBots(): Promise<Bot[]> {
       b.campaign,
       b.whatsapp_sources,
       b.send_method,
+      b.link_required,
       b.delay_between_groups,
       b.delay_between_messages,
       b.link_parameters,
@@ -708,6 +715,7 @@ export async function getAllBots(): Promise<Bot[]> {
     campaign: string | null;
     whatsapp_sources: string;
     send_method: string;
+    link_required: number;
     delay_between_groups: number;
     delay_between_messages: number;
     link_parameters: string | null;
@@ -726,6 +734,7 @@ export async function getAllBots(): Promise<Bot[]> {
       row.campaign,
       row.whatsapp_sources as WhatsAppSources,
       row.send_method as SendMethods,
+      !!row.link_required,
       row.delay_between_groups,
       row.delay_between_messages,
       row.link_parameters as LinkParameters,
@@ -994,7 +1003,6 @@ export async function getGlobalStats(
 }
 
 export async function getDatabaseBackup(): Promise<{
-  app_config: any[];
   bots: any[];
   authorized_numbers: any[];
   groups: number;
@@ -1002,12 +1010,12 @@ export async function getDatabaseBackup(): Promise<{
   members: number;
   messages: number;
 }> {
-  const appConfig = await all<any>(`SELECT * FROM app_config`);
   const bots = await all<{
     id: number;
     wa_number: string;
     campaign: string | null;
     whatsapp_sources: string;
+    link_required: number;
     send_method: string;
     delay_between_groups: number;
     delay_between_messages: number;
@@ -1020,6 +1028,7 @@ export async function getDatabaseBackup(): Promise<{
       wa_number, 
       campaign, 
       whatsapp_sources, 
+      link_required,
       send_method, 
       delay_between_groups, 
       delay_between_messages, 
@@ -1043,8 +1052,7 @@ export async function getDatabaseBackup(): Promise<{
   );
 
   return {
-    app_config: appConfig,
-    bots: bots,
+    bots: bots.map(b => ({ ...b, link_required: !!b.link_required })),
     authorized_numbers: authorizedNumbers,
     groups,
     bot_groups,
@@ -1115,4 +1123,21 @@ export async function deleteAuthKey(
     `DELETE FROM bot_keys WHERE bot_id = ? AND category = ? AND key_id = ?`,
     [botId, category, keyId]
   );
+}
+
+export async function getTotalMessagesToday(botId: number): Promise<number> {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const isoToday = today.toISOString();
+
+  const row = await get<{ total: number }>(
+    `
+    SELECT COUNT(*) as total
+    FROM messages m
+    INNER JOIN bot_messages bm ON bm.message_id = m.id
+    WHERE m.timestamp >= ? AND bm.bot_id = ?
+    `,
+    [isoToday, botId]
+  );
+  return row?.total ?? 0;
 }

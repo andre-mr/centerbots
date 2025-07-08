@@ -221,6 +221,14 @@ export function setupIpcHandlers() {
   );
 
   ipcMain.handle(
+    "bots:moveMessageToTop",
+    async (_event, botId: number, idx: number) => {
+      const waManager = getWaManager();
+      waManager.moveMessageToTop(botId, idx);
+    }
+  );
+
+  ipcMain.handle(
     "bots:deleteMessageFromQueue",
     async (_event, botId: number, idx: number) => {
       const waManager = getWaManager();

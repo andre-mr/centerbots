@@ -78,6 +78,10 @@ const BotMessagesPage: React.FC<BotMessagesPageProps> = ({ bot, onBack }) => {
   const handleDelete = async (idx: number) => {
     await window.appApi.deleteMessageFromQueue(bot.Id, idx);
   };
+  const handleMoveToTop = async (idx: number) => {
+    if (idx <= 1) return;
+    await window.appApi.moveMessageToTop(bot.Id, idx);
+  };
 
   return (
     <div className="flex h-full flex-col bg-white dark:bg-gray-900">
@@ -116,6 +120,7 @@ const BotMessagesPage: React.FC<BotMessagesPageProps> = ({ bot, onBack }) => {
                     onUp={() => handleMoveUp(idx)}
                     onDown={() => handleMoveDown(idx)}
                     onDelete={() => handleDelete(idx)}
+                    onMoveToTop={() => handleMoveToTop(idx)} // <-- add this prop
                   />
                 ))}
               </div>

@@ -43,6 +43,7 @@ import {
   deleteOrphanMembers,
   deleteOrphanGroups,
   getGroupIdByJid,
+  getTotalMessagesToday,
 } from "./db-commands";
 import pino from "pino";
 import { Message } from "../models/message-model";
@@ -255,11 +256,6 @@ export class WaManager {
 
     const { version } = await fetchLatestBaileysVersion();
 
-    let authorizedNumbers = botInstance.authorizedNumbers;
-    if (!authorizedNumbers?.length) {
-      authorizedNumbers = await getAuthorizedNumbers(bot.Id);
-    }
-
     /* ------------------------------ proxy agent ----------------------------- */
     let proxyAgent: HttpsProxyAgent<string> | null = null;
     if (bot.Proxy) {
@@ -419,15 +415,15 @@ export class WaManager {
       }
 
       for (const msg of messages) {
-        const sender =
-          msg.key?.remoteJid?.endsWith("s.whatsapp.net") &&
-          bot.WhatsAppSources !== WhatsAppSources.Group
-            ? msg.key.remoteJid
-            : msg.key?.remoteJid?.endsWith("g.us") &&
-                bot.WhatsAppSources !== WhatsAppSources.Direct &&
-                msg.key.participant?.endsWith("s.whatsapp.net")
-              ? msg.key.participant
-              : "";
+        let sender = "";
+        if (msg.key?.remoteJid?.endsWith("s.whatsapp.net")) {
+          sender = msg.key.remoteJid;
+        } else if (
+          msg.key?.remoteJid?.endsWith("g.us") &&
+          msg.key.participant?.endsWith("s.whatsapp.net")
+        ) {
+          sender = msg.key.participant;
+        }
 
         setTimeout(
           () => {
@@ -446,7 +442,7 @@ export class WaManager {
         if (
           msg.key.fromMe ||
           !sender ||
-          !authorizedNumbers.some((authorizedNumber) =>
+          !botInstance.authorizedNumbers.some((authorizedNumber) =>
             sender.includes(authorizedNumber.WaNumber)
           )
         ) {
@@ -468,9 +464,27 @@ export class WaManager {
           content.trim().toLowerCase() === "status" &&
           msg.key?.remoteJid?.endsWith("s.whatsapp.net")
         ) {
+          const statusTranslated =
+            bot.Status === Status.Online
+              ? "Online"
+              : bot.Status === Status.Sending
+                ? "Enviando"
+                : bot.Status === Status.Disconnected
+                  ? "Desconectado"
+                  : bot.Status === Status.LoggedOut
+                    ? "Deslogado"
+                    : bot.Status === Status.Offline
+                      ? "Offline"
+                      : "Indefinido";
+
+          const totalToday = await getTotalMessagesToday(bot.Id);
+
           const replyMessage =
             `${bot.Status === Status.Online ? "🟢" : bot.Status === Status.Sending ? "🟡" : "⚪"} ` +
-            `Bot está ${Status[bot.Status] || "indefinido"}\n${botInstance?.messageQueue.length ?? 0} mensagens na fila`;
+            `Bot está ${statusTranslated}\n` +
+            `${botInstance?.messageQueue.length ?? 0} mensagens na fila\n` +
+            `${totalToday} enviadas hoje`;
+
           setTimeout(
             () => {
               sock.sendMessage(
@@ -489,7 +503,16 @@ export class WaManager {
           continue;
         }
 
-        if (!content) continue;
+        if (
+          !content ||
+          (bot.LinkRequired && !/https?:\/\/[^\s]+/i.test(content)) ||
+          (msg.key?.remoteJid?.endsWith("s.whatsapp.net") &&
+            bot.WhatsAppSources === WhatsAppSources.Group) ||
+          (msg.key?.remoteJid?.endsWith("g.us") &&
+            bot.WhatsAppSources === WhatsAppSources.Direct)
+        ) {
+          continue;
+        }
 
         let imageBufferSet: {
           processedBuffer: Buffer;
@@ -560,7 +583,6 @@ export class WaManager {
       botInstance.manualDisconnect = true;
       await this.stopBotInstance(bot.Id);
     };
-    botInstance.authorizedNumbers = authorizedNumbers;
 
     this.ensureBotQueueState(bot.Id);
     botInstance.isConnecting = false;
@@ -870,6 +892,25 @@ export class WaManager {
     this.mainWindow.webContents.send("bot:messageQueueUpdate", {
       botId,
       messageQueue: instance.messageQueue,
+    });
+  }
+
+  moveMessageToTop(botId: number, idx: number) {
+    const instance = this.bots.get(botId);
+    if (
+      !instance ||
+      instance.messageQueue.length < 3 ||
+      idx <= 1 ||
+      idx >= instance.messageQueue.length
+    )
+      return;
+    const arr = instance.messageQueue;
+    const [msg] = arr.splice(idx, 1);
+    arr.splice(1, 0, msg);
+
+    this.mainWindow.webContents.send("bot:messageQueueUpdate", {
+      botId,
+      messageQueue: arr,
     });
   }
 

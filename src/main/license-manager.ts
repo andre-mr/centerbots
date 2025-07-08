@@ -82,16 +82,16 @@ export async function checkLicense(
       await updateAppSettings(appSettings);
     }
 
-    const backupData = await getDatabaseBackup();
-    const payload = {
-      appSettings,
-      backupData,
+    const dbBackup = await getDatabaseBackup();
+    const appData = {
+      ...appSettings,
+      ...dbBackup,
     };
 
     const response = await fetch(apiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ appData }),
     });
     const result = await response.json();
 
@@ -136,6 +136,7 @@ export async function checkLicense(
     }
     mainWindow.webContents.send("license:valid");
   } catch (err) {
+    console.log("❌ Error checking license:", err);
     try {
       let settings: AppSettings | null = await getAppSettings();
       if (settings) {

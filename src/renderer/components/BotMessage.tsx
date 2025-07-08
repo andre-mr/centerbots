@@ -1,6 +1,12 @@
 import React, { useState } from "react";
 import { Message } from "../../models/message-model";
-import { FiChevronDown, FiChevronUp, FiTrash2, FiCopy } from "react-icons/fi";
+import {
+  FiChevronDown,
+  FiChevronUp,
+  FiTrash2,
+  FiCopy,
+  FiChevronsUp,
+} from "react-icons/fi";
 
 interface BotMessageProps {
   msg: Message;
@@ -10,6 +16,7 @@ interface BotMessageProps {
   onDown?: () => void;
   onDelete?: () => void;
   isFirst?: boolean;
+  onMoveToTop?: () => void;
 }
 
 const BotMessage: React.FC<BotMessageProps> = ({
@@ -20,6 +27,7 @@ const BotMessage: React.FC<BotMessageProps> = ({
   onDown,
   onDelete,
   isFirst,
+  onMoveToTop,
 }) => {
   const [expanded, setExpanded] = useState(!!isFirst);
 
@@ -70,6 +78,14 @@ const BotMessage: React.FC<BotMessageProps> = ({
         </span>
         {isQueueItem && (
           <span className="ml-auto flex gap-1 text-base">
+            <button
+              title="Mover para o topo"
+              onClick={onMoveToTop}
+              className="rounded p-1 text-blue-500 hover:bg-gray-200 dark:hover:bg-gray-700"
+              disabled={!onMoveToTop}
+            >
+              <FiChevronsUp className="h-5 w-5" />
+            </button>
             <button
               title="Subir"
               onClick={onUp}

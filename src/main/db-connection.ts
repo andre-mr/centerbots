@@ -56,7 +56,33 @@ function migrate(db: sqlite3.Database): Promise<void> {
 
       if (current < 2) {
         /* ------------------------------ Migration for version 2 ----------------------------- */
-        // Future migration code for version 2 goes here.
+        db.serialize(() => {
+          db.run("BEGIN");
+          db.run(
+            `ALTER TABLE bots ADD COLUMN link_required INTEGER NOT NULL DEFAULT 0;`,
+            (alterErr) => {
+              if (alterErr && !/duplicate column/i.test(alterErr.message)) {
+                db.run("ROLLBACK");
+                return reject(alterErr);
+              }
+              db.run("PRAGMA user_version = 2;", (verErr) => {
+                if (verErr) {
+                  db.run("ROLLBACK");
+                  return reject(verErr);
+                }
+                db.run("COMMIT", (commitErr) =>
+                  commitErr ? reject(commitErr) : resolve()
+                );
+              });
+            }
+          );
+        });
+        return;
+      }
+
+      if (current < 3) {
+        /* ------------------------------ Migration for version 3 ----------------------------- */
+        // Future migration code for version 3 goes here.
         return resolve();
       }
 
@@ -89,6 +115,7 @@ CREATE TABLE IF NOT EXISTS bots (
     wa_number               TEXT,                         -- account number (e.g.: '553499991111')
     campaign                TEXT    NOT Null,             -- campaign name (e.g.: 'Promobot')
     whatsapp_sources        TEXT    NOT NULL,             -- WhatsAppSources: 'All', 'Direct', 'Group'
+    link_required           INTEGER NOT NULL DEFAULT 0,   -- 0 = false, 1 = true (send only messages with link)
     send_method             TEXT    NOT NULL,             -- SendMethods: 'Text', 'Image', 'Forward'
     delay_between_groups    INTEGER NOT NULL DEFAULT 2,   -- in seconds
     delay_between_messages  INTEGER NOT NULL DEFAULT 10,  -- in seconds
