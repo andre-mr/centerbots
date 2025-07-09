@@ -25,7 +25,7 @@ function createWindow(): BrowserWindow {
     },
   });
 
-  setupIpcHandlers();
+  // setupIpcHandlers();
 
   // mainWindow.webContents.on("before-input-event", (_event, input) => {
   //   if (input.key === "F12" && input.type === "keyDown") {
@@ -111,6 +111,8 @@ if (!gotTheLock) {
 
   app.whenReady().then(async () => {
     electronApp.setAppUserModelId("com.electron");
+
+    setupIpcHandlers(); // ADICIONE AQUI
 
     mainWindow = createWindow();
 
