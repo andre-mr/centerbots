@@ -99,7 +99,7 @@ const BotCard: React.FC<
           : "bg-gray-50 opacity-70 dark:border-gray-800 dark:bg-gray-900"
       }`}
     >
-      <div className="flex items-center justify-between border-b bg-teal-50 p-2 dark:border-gray-800 dark:bg-gray-900">
+      <div className="flex items-center justify-between border-b bg-teal-50 px-2 py-1 dark:border-gray-800 dark:bg-gray-900">
         <button
           className={`relative flex h-5 w-10 items-center rounded-full transition-colors duration-200 ${
             bot.Active !== false
@@ -116,11 +116,11 @@ const BotCard: React.FC<
 
         <button
           className={`flex items-center gap-1 rounded-full px-3 py-0.5 text-sm font-semibold transition-colors duration-200 ${
-            bot.Paused
-              ? "animate-pulse bg-yellow-400 text-yellow-900 hover:bg-yellow-500 dark:bg-yellow-500 dark:text-yellow-900 dark:hover:bg-yellow-400"
-              : bot.Active === true
-                ? "bg-gray-200 text-gray-700 hover:bg-yellow-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-yellow-600"
-                : "cursor-not-allowed bg-gray-200 text-gray-400 dark:bg-gray-800 dark:text-gray-500"
+            bot.Active === true
+              ? bot.Paused
+                ? "animate-pulse bg-yellow-400 text-yellow-900 hover:bg-yellow-500 dark:bg-yellow-500 dark:text-yellow-900 dark:hover:bg-yellow-400"
+                : "bg-gray-200 text-gray-700 hover:bg-yellow-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-yellow-600"
+              : "cursor-not-allowed bg-gray-200 text-gray-400 dark:bg-gray-800 dark:text-gray-500"
           }`}
           onClick={handlePauseResume}
           disabled={bot.Active === false}
@@ -139,14 +139,14 @@ const BotCard: React.FC<
           )}
         </button>
       </div>
-      <div className="flex items-center justify-between px-2 py-1">
+      <div className="flex items-center justify-between px-2 py-0.5">
         <div className="flex items-center gap-4">
           <span>{statusIcon(bot.Status)}</span>
           <div>
-            <div className="text-xl font-bold text-whatsapp-teal dark:text-whatsapp">
+            <div className="text-lg font-bold text-whatsapp-teal dark:text-whatsapp">
               {bot.Campaign || "Bot sem nome"}
             </div>
-            <div className="text-base text-gray-700 dark:text-gray-300">
+            <div className="text-sm text-gray-700 dark:text-gray-300 xl:text-xs">
               {bot.WaNumber
                 ? bot.WaNumber.length === 13
                   ? `${bot.WaNumber.slice(0, 2)} ${bot.WaNumber.slice(2, 4)} ${bot.WaNumber.slice(4, 9)} ${bot.WaNumber.slice(9)}`
@@ -158,9 +158,9 @@ const BotCard: React.FC<
           </div>
         </div>
 
-        <div className="flex flex-col items-center gap-2">
+        <div className="flex flex-col items-center">
           <button
-            className="w-full rounded-full border-2 border-emerald-400 bg-white/40 px-3 py-1 text-sm text-emerald-700 backdrop-blur transition hover:bg-emerald-50 dark:border-emerald-700 dark:bg-gray-800/60 dark:text-emerald-400 dark:hover:bg-gray-700"
+            className="w-full rounded-full border-2 border-emerald-400 bg-white/40 px-3 py-0.5 text-sm text-emerald-700 backdrop-blur transition hover:bg-emerald-50 dark:border-emerald-700 dark:bg-gray-800/60 dark:text-emerald-400 dark:hover:bg-gray-700"
             onClick={onDetails}
           >
             Configurar
@@ -180,7 +180,7 @@ const BotCard: React.FC<
             </span>
           </div>
           <button
-            className="rounded-full border-2 border-sky-400 bg-white/40 px-3 py-0.5 text-sm text-sky-700 backdrop-blur transition hover:bg-sky-50 dark:border-sky-500 dark:bg-gray-800/60 dark:text-sky-400 dark:hover:bg-gray-700"
+            className="rounded-full border-2 border-sky-400 bg-white/40 px-3 py-0.5 text-sm text-sky-700 backdrop-blur transition hover:bg-sky-50 dark:border-sky-500 dark:bg-gray-800/60 dark:text-sky-400 dark:hover:bg-gray-700 xl:py-0"
             onClick={() => onShowGroups(bot)}
           >
             Grupos
@@ -193,7 +193,7 @@ const BotCard: React.FC<
             {`${bot.sendingMessageInfo?.queueLength ?? "0"} mensage${bot.sendingMessageInfo?.queueLength === 1 ? "m" : "ns"} na fila`}
           </div>
           <button
-            className="rounded-full border-2 border-yellow-400 bg-white/40 px-3 py-0.5 text-sm text-yellow-700 backdrop-blur transition hover:bg-yellow-50 dark:border-yellow-400 dark:bg-gray-800/60 dark:text-yellow-300 dark:hover:bg-yellow-900/40"
+            className="rounded-full border-2 border-yellow-400 bg-white/40 px-3 py-0.5 text-sm text-yellow-700 backdrop-blur transition hover:bg-yellow-50 dark:border-yellow-400 dark:bg-gray-800/60 dark:text-yellow-300 dark:hover:bg-yellow-900/40 xl:py-0"
             onClick={() => onShowMessages(bot)}
           >
             Mensagens
@@ -201,7 +201,7 @@ const BotCard: React.FC<
         </div>
       }
 
-      <div className="flex flex-col gap-1 border-t px-2 py-1 dark:border-gray-700">
+      <div className="flex flex-col gap-1 border-t px-2 py-1 dark:border-gray-700 xl:py-0">
         {bot.sendingMessageInfo?.currentGroup &&
         bot.sendingMessageInfo.queueLength > 0 ? (
           <div className="truncate text-xs italic text-gray-700 dark:text-gray-300">
@@ -212,14 +212,14 @@ const BotCard: React.FC<
             Nenhum envio no momento.
           </div>
         )}
-        <div className="flex items-center gap-2 rounded bg-blue-50 p-1 dark:bg-slate-700">
+        <div className="mb-1 flex items-center gap-2 rounded bg-blue-50 p-1 dark:bg-slate-700 xl:mb-0 xl:p-0.5">
           <span className="truncate text-xs text-blue-600 dark:text-blue-300">
             {bot.sendingMessageInfo?.currentGroup &&
             bot.sendingMessageInfo.queueLength > 0
               ? bot.sendingMessageInfo.currentGroup
               : "\u00A0"}
           </span>
-          <div className="h-2 flex-1 rounded bg-gray-200 dark:bg-gray-800">
+          <div className="h-2 flex-1 rounded bg-gray-200 dark:bg-gray-800 xl:h-1.5">
             <div
               className="h-2 rounded bg-blue-500 transition-all dark:bg-blue-400"
               style={{

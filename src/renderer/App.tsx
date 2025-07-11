@@ -43,6 +43,7 @@ const App: React.FC = () => {
       WhatsAppSources.Direct,
       SendMethods.Forward,
       false,
+      false,
       2,
       10,
       LinkParameters.None,

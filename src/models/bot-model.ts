@@ -14,6 +14,7 @@ export class Bot {
     public WhatsAppSources: WhatsAppSources,
     public SendMethod: SendMethods,
     public LinkRequired: boolean,
+    public SendingReport: boolean,
     public DelayBetweenGroups: number,
     public DelayBetweenMessages: number,
     public LinkParameters: LinkParameters,

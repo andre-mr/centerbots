@@ -233,10 +233,10 @@ const BotDetailsPage: React.FC<BotDetailsProps> = ({
               id="waNumber"
               name="WaNumber"
               type="text"
-              className="rounded border bg-white px-2 py-2 font-bold text-whatsapp-teal dark:bg-gray-800 dark:text-gray-100"
-              placeholder="Ex: 553499991111 (opcional, atribuído automaticamente)"
+              className="cursor-not-allowed rounded border px-2 py-2 font-bold text-whatsapp-teal dark:bg-gray-800 dark:text-gray-100"
+              placeholder="(atribuído automaticamente)"
               value={formData.WaNumber ?? ""}
-              onChange={handleChange}
+              disabled
             />
           </div>
           <div className="flex flex-col gap-1">
@@ -382,6 +382,29 @@ const BotDetailsPage: React.FC<BotDetailsProps> = ({
               onChange={handleChange}
             >
               {enumToOptions(LinkParameters, linkParametersTranslations)}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label
+              className="font-semibold text-gray-700 dark:text-gray-200"
+              htmlFor="sendingReport"
+            >
+              Relatório de envio
+            </label>
+            <select
+              id="sendingReport"
+              name="SendingReport"
+              className="rounded border bg-white px-1.5 py-2 dark:bg-gray-800 dark:text-gray-100"
+              value={formData.SendingReport ? "true" : "false"}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  SendingReport: e.target.value === "true",
+                }))
+              }
+            >
+              <option value="true">Ativado</option>
+              <option value="false">Desativado</option>
             </select>
           </div>
           <div className="flex flex-col gap-1">

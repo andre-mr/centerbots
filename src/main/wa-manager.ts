@@ -69,6 +69,7 @@ type BotInstance = {
   manualDisconnect: boolean;
   isConnecting: boolean;
   stop: (() => Promise<void>) | null;
+  sentCount: number;
 };
 
 type BotQueueState = {
@@ -110,6 +111,7 @@ export class WaManager {
         lastGroupFetch: null,
         broadcastGroupJids: null,
         reconnectAttempts: 0,
+        sentCount: 0,
       });
     } else {
       const instance = this.bots.get(bot.Id)!;
@@ -243,14 +245,18 @@ export class WaManager {
 
   async startBot(bot: Bot) {
     const botInstance = this.bots.get(bot.Id);
-    if (!botInstance) {
-      console.error(`❌ Bot instance for ID ${bot.Id} not found.`);
-      return;
+    if (!botInstance) return;
+
+    if (botInstance.socket) {
+      try {
+        botInstance.socket.end(new Error("restarting"));
+      } catch (err) {
+        console.error("❌ Error while ending the previous socket:", err);
+      }
+      botInstance.socket = null;
     }
 
-    if (botInstance.socket && botInstance.isConnecting) {
-      return;
-    }
+    if (botInstance.isConnecting) return;
     botInstance.isConnecting = true;
     botInstance.manualDisconnect = false;
 
@@ -361,6 +367,11 @@ export class WaManager {
           instance.groupMetadataCache = groupMetadataCache;
           instance.lastGroupFetch = now;
           await this.syncBotGroupsAndMembers(bot.Id, groupMetadataCache);
+        }
+
+        const state = this.botQueueStates.get(bot.Id);
+        if (state && !state.paused) {
+          this.processQueue(bot.Id);
         }
       }
 
@@ -604,6 +615,17 @@ export class WaManager {
     if (!instance) {
       return;
     }
+
+    if (instance.bot.SendingReport) {
+      if (instance.sentCount <= 0 || instance.messageQueue.length === 0) {
+        instance.sentCount = 1;
+      } else {
+        instance.sentCount++;
+      }
+    } else {
+      instance.sentCount = 0;
+    }
+
     instance.messageQueue.push(message);
 
     if (!instance.bot.sendingMessageInfo) {
@@ -664,7 +686,11 @@ export class WaManager {
 
     state.sending = true;
 
-    while (!state.paused && instance.messageQueue.length > 0) {
+    while (
+      !state.paused &&
+      instance.messageQueue.length > 0 &&
+      instance.socket?.ws.isOpen
+    ) {
       const message = instance.messageQueue[0];
       const broadcastSet = instance.broadcastGroupJids;
       const groupIds = Object.keys(instance.groupMetadataCache);
@@ -673,7 +699,11 @@ export class WaManager {
         broadcastSet?.has(groupJid)
       ).length;
 
-      while (!state.paused && state.currentGroupIndex < groupIds.length) {
+      while (
+        !state.paused &&
+        state.currentGroupIndex < groupIds.length &&
+        instance.socket?.ws.isOpen
+      ) {
         const groupJid = groupIds[state.currentGroupIndex];
         if (!broadcastSet?.has(groupJid)) {
           state.currentGroupIndex++;
@@ -709,19 +739,29 @@ export class WaManager {
             await delay(100 + Math.floor(Math.random() * 900));
             await instance.socket.sendPresenceUpdate("paused", groupJid);
           }
-          await sendMessageToGroup(instance, message, groupJid);
+          await sendMessageToGroupWithTimeout(
+            instance,
+            message,
+            groupJid,
+            300000
+          );
         } catch (err) {
           console.error(`❌ Error sending message to group ${groupJid}!`);
         }
         state.currentGroupIndex++;
 
         if (state.currentGroupIndex < groupIds.length && !state.paused) {
-          await delay((instance.bot.DelayBetweenGroups ?? 0) * 1000, 1000);
+          const baseMs = (instance.bot.DelayBetweenGroups ?? 0) * 1000;
+          await delay(baseMs, baseMs > 0 ? 1000 : undefined);
         }
         if (state.paused) break;
       }
 
-      if (!state.paused) {
+      if (
+        !state.paused &&
+        state.currentGroupIndex >= groupIds.length &&
+        instance.socket?.ws.isOpen
+      ) {
         instance.bot.sendingMessageInfo = {
           content: "",
           currentGroup: "",
@@ -743,7 +783,8 @@ export class WaManager {
           messageQueue: instance.messageQueue,
         });
         if (instance.messageQueue.length > 0) {
-          await delay((instance.bot.DelayBetweenMessages ?? 0) * 1000, 1000);
+          const baseMs = (instance.bot.DelayBetweenMessages ?? 0) * 1000;
+          await delay(baseMs, baseMs > 0 ? 1000 : undefined);
         }
       }
     }
@@ -752,6 +793,30 @@ export class WaManager {
       !state.paused &&
       state.currentMessageIndex >= instance.messageQueue.length
     ) {
+      if (
+        instance.bot.SendingReport &&
+        instance.sentCount > 0 &&
+        instance.socket &&
+        instance.socket.ws?.isOpen
+      ) {
+        const totalSent = instance.sentCount;
+        instance.sentCount = 0;
+        const reportMsg =
+          `✅ Lote de envios concluído!` +
+          `\n${totalSent} mensagem${totalSent > 1 ? "s" : ""} enviada${totalSent > 1 ? "s" : ""}.`;
+        for (const authNumber of instance.authorizedNumbers) {
+          const jid = authNumber.WaNumber.endsWith("@s.whatsapp.net")
+            ? authNumber.WaNumber
+            : `${authNumber.WaNumber}@s.whatsapp.net`;
+          try {
+            await instance.socket.sendMessage(jid, { text: reportMsg });
+          } catch (e) {
+            console.error(
+              `❌ Error sending report message to ${authNumber.WaNumber}`
+            );
+          }
+        }
+      }
       instance.messageQueue = [];
       state.currentMessageIndex = 0;
       state.currentGroupIndex = 0;
@@ -812,9 +877,15 @@ export class WaManager {
     if (typeof patch.Status === "undefined") instance.bot.Status = prevStatus;
 
     if (patch.Active === true && !instance.socket) {
+      const state = this.botQueueStates.get(botId);
+      if (state) state.paused = false;
+      instance.bot.Paused = false;
       await this.startBot(instance.bot);
+      this.mainWindow.webContents.send("bot:statusUpdate", instance.bot);
     } else if (patch.Active === false) {
       instance.bot.Status = Status.Offline;
+      this.mainWindow.webContents.send("bot:statusUpdate", instance.bot);
+
       if (instance.socket) {
         await instance.stop?.();
       }
@@ -971,7 +1042,6 @@ export class WaManager {
     instance.isConnecting = false;
     instance.manualDisconnect = false;
 
-    instance.messageQueue = [];
     instance.reconnectAttempts = 0;
     this.mainWindow.webContents.send("bot:messageQueueUpdate", {
       botId,
@@ -1019,19 +1089,14 @@ function addUtmParamsToLinks(
 }
 
 async function delay(base: number, randomRange?: number): Promise<void> {
-  const safeBase = Math.max(0, base);
-  if (safeBase === 0) {
-    return;
-  }
-
+  const safeBase = Math.max(100, base);
   let ms = safeBase;
   if (randomRange !== undefined) {
     const safeRange = Math.max(0, randomRange);
     const randomPart = Math.random() * safeRange * 2 - safeRange;
-    ms = safeBase + randomPart;
+    ms = Math.max(100, safeBase + randomPart);
   }
-
-  await new Promise((res) => setTimeout(res, Math.floor(Math.max(0, ms))));
+  await new Promise((res) => setTimeout(res, Math.floor(ms)));
 }
 
 async function sendMessageToGroup(
@@ -1124,4 +1189,23 @@ async function sendMessageToGroup(
       });
     }
   }
+}
+
+async function sendMessageToGroupWithTimeout(
+  instance: BotInstance,
+  message: Message,
+  groupJid: string,
+  timeoutMs: number
+) {
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(
+      () => reject(new Error(`Timeout: Message sending took > ${timeoutMs}ms`)),
+      timeoutMs
+    )
+  );
+
+  return Promise.race([
+    sendMessageToGroup(instance, message, groupJid),
+    timeoutPromise,
+  ]);
 }

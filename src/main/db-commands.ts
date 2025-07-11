@@ -557,7 +557,7 @@ export async function getMessagesByPeriod(
 export async function createBot(bot: Bot): Promise<number> {
   const sql = `
     INSERT INTO bots (
-      wa_number, campaign, whatsapp_sources, send_method, link_required,
+      wa_number, campaign, whatsapp_sources, send_method, link_required, sending_report,
       delay_between_groups, delay_between_messages, link_parameters, updated, proxy
     )
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -568,6 +568,7 @@ export async function createBot(bot: Bot): Promise<number> {
     bot.WhatsAppSources,
     bot.SendMethod,
     +bot.LinkRequired,
+    +bot.SendingReport,
     bot.DelayBetweenGroups,
     bot.DelayBetweenMessages,
     bot.LinkParameters,
@@ -588,6 +589,7 @@ export async function updateBot(bot: Bot): Promise<void> {
            whatsapp_sources = ?,
            send_method = ?,
            link_required = ?,
+           sending_report = ?,
            delay_between_groups = ?,
            delay_between_messages = ?,
            link_parameters = ?,
@@ -601,6 +603,7 @@ export async function updateBot(bot: Bot): Promise<void> {
     bot.WhatsAppSources,
     bot.SendMethod,
     +bot.LinkRequired,
+    +bot.SendingReport,
     bot.DelayBetweenGroups,
     bot.DelayBetweenMessages,
     bot.LinkParameters,
@@ -627,6 +630,7 @@ export async function getBotById(id: number): Promise<Bot | null> {
       b.whatsapp_sources,
       b.send_method,
       b.link_required,
+      b.sending_report,
       b.delay_between_groups,
       b.delay_between_messages,
       b.link_parameters,
@@ -651,6 +655,7 @@ export async function getBotById(id: number): Promise<Bot | null> {
     whatsapp_sources: string;
     send_method: string;
     link_required: number;
+    sending_report: number;
     delay_between_groups: number;
     delay_between_messages: number;
     link_parameters: string | null;
@@ -670,6 +675,7 @@ export async function getBotById(id: number): Promise<Bot | null> {
         row.whatsapp_sources as WhatsAppSources,
         row.send_method as SendMethods,
         !!row.link_required,
+        !!row.sending_report,
         row.delay_between_groups,
         row.delay_between_messages,
         row.link_parameters as LinkParameters,
@@ -693,6 +699,7 @@ export async function getAllBots(): Promise<Bot[]> {
       b.whatsapp_sources,
       b.send_method,
       b.link_required,
+      b.sending_report,
       b.delay_between_groups,
       b.delay_between_messages,
       b.link_parameters,
@@ -716,6 +723,7 @@ export async function getAllBots(): Promise<Bot[]> {
     whatsapp_sources: string;
     send_method: string;
     link_required: number;
+    sending_report: number;
     delay_between_groups: number;
     delay_between_messages: number;
     link_parameters: string | null;
@@ -735,6 +743,7 @@ export async function getAllBots(): Promise<Bot[]> {
       row.whatsapp_sources as WhatsAppSources,
       row.send_method as SendMethods,
       !!row.link_required,
+      !!row.sending_report,
       row.delay_between_groups,
       row.delay_between_messages,
       row.link_parameters as LinkParameters,

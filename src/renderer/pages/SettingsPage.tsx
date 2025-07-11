@@ -126,7 +126,7 @@ const SettingsPage: React.FC = () => {
             handleSave();
           }}
         >
-          <div className="flex flex-col gap-8">
+          <div className="flex flex-col gap-5">
             {/* General Settings */}
             <div className="flex flex-col">
               <h3 className="mb-4 text-lg font-semibold text-emerald-700 dark:text-emerald-400">
@@ -144,7 +144,7 @@ const SettingsPage: React.FC = () => {
                     id="userInfo"
                     name="UserId"
                     type="text"
-                    className="rounded-lg border border-gray-300 bg-white px-3 py-2.5 transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:focus:border-emerald-400"
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-1 transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:focus:border-emerald-400"
                     value={settings.UserId || ""}
                     placeholder="Ex: 5534988881111"
                     onChange={handleChange}
@@ -161,7 +161,7 @@ const SettingsPage: React.FC = () => {
                     id="apiKey"
                     name="LicenseKey"
                     type="text"
-                    className="rounded-lg border border-gray-300 bg-white px-3 py-2.5 transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:focus:border-emerald-400"
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-1 transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:focus:border-emerald-400"
                     value={settings.LicenseKey || ""}
                     placeholder="Digite sua chave"
                     onChange={handleChange}
@@ -176,7 +176,7 @@ const SettingsPage: React.FC = () => {
                 Informações da Licença
               </h3>
               <div className="grid grid-cols-2 gap-6">
-                <div className="rounded-lg bg-gray-50 p-4 dark:bg-gray-800/50">
+                <div className="rounded-lg bg-gray-50 p-2 dark:bg-gray-800/50">
                   <div className="mb-2 font-semibold text-gray-700 dark:text-gray-200">
                     Status do Plano
                   </div>
@@ -187,7 +187,7 @@ const SettingsPage: React.FC = () => {
                     </span>
                   </div>
                 </div>
-                <div className="rounded-lg bg-gray-50 p-4 dark:bg-gray-800/50">
+                <div className="rounded-lg bg-gray-50 p-2 dark:bg-gray-800/50">
                   <div className="mb-2 font-semibold text-gray-700 dark:text-gray-200">
                     Tipo de Plano
                   </div>
@@ -199,7 +199,7 @@ const SettingsPage: React.FC = () => {
                   </div>
                 </div>
               </div>
-              <div className="mt-4 rounded-lg bg-gray-50 p-3 dark:bg-gray-800/50">
+              <div className="mt-4 rounded-lg bg-gray-50 p-2 dark:bg-gray-800/50">
                 <div className="flex items-center gap-2 text-sm">
                   <span className="font-semibold text-blue-700 dark:text-blue-300">
                     Última verificação:
@@ -224,7 +224,7 @@ const SettingsPage: React.FC = () => {
               ) : stats ? (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {/* System */}
-                  <div className="rounded-lg bg-gradient-to-br from-blue-50 to-blue-100 p-4 dark:from-blue-900/20 dark:to-blue-800/20">
+                  <div className="rounded-lg bg-gradient-to-br from-blue-50 to-blue-100 p-3 dark:from-blue-900/20 dark:to-blue-800/20">
                     <div className="mb-3 flex items-center gap-3">
                       <FiActivity
                         className="text-blue-600 dark:text-blue-400"
@@ -273,7 +273,7 @@ const SettingsPage: React.FC = () => {
                   </div>
 
                   {/* Target */}
-                  <div className="rounded-lg bg-gradient-to-br from-emerald-50 to-emerald-100 p-4 dark:from-emerald-900/20 dark:to-emerald-800/20">
+                  <div className="rounded-lg bg-gradient-to-br from-emerald-50 to-emerald-100 p-3 dark:from-emerald-900/20 dark:to-emerald-800/20">
                     <div className="mb-3 flex items-center gap-3">
                       <FiTarget
                         className="text-emerald-600 dark:text-emerald-400"
@@ -313,7 +313,7 @@ const SettingsPage: React.FC = () => {
                   </div>
 
                   {/* Messages */}
-                  <div className="rounded-lg bg-gradient-to-br from-purple-50 to-purple-100 p-4 dark:from-purple-900/20 dark:to-purple-800/20 md:col-span-2 lg:col-span-1">
+                  <div className="rounded-lg bg-gradient-to-br from-purple-50 to-purple-100 p-3 dark:from-purple-900/20 dark:to-purple-800/20 md:col-span-2 lg:col-span-1">
                     <div className="mb-3 flex items-center gap-3">
                       <FiMessageSquare
                         className="text-purple-600 dark:text-purple-400"
@@ -351,14 +351,6 @@ const SettingsPage: React.FC = () => {
                           {stats.monthMessages.toLocaleString()}
                         </span>
                       </div>
-                      {/* <div className="flex justify-between border-b border-white dark:border-gray-600">
-                        <span className="text-purple-700 dark:text-purple-300">
-                          Total Geral
-                        </span>
-                        <span className="font-bold text-purple-800 dark:text-purple-200">
-                          {stats.totalMessages.toLocaleString()}
-                        </span>
-                      </div> */}
                     </div>
                   </div>
                 </div>
@@ -371,7 +363,7 @@ const SettingsPage: React.FC = () => {
           </div>
 
           {/* Footer with controls */}
-          <div className="flex items-center justify-between pt-4">
+          <div className="flex items-center justify-between pt-2">
             <div className="flex items-center gap-3">
               <div className="flex items-center">
                 <button

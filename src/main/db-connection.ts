@@ -82,8 +82,28 @@ function migrate(db: sqlite3.Database): Promise<void> {
 
       if (current < 3) {
         /* ------------------------------ Migration for version 3 ----------------------------- */
-        // Future migration code for version 3 goes here.
-        return resolve();
+        db.serialize(() => {
+          db.run("BEGIN");
+          db.run(
+            `ALTER TABLE bots ADD COLUMN sending_report INTEGER NOT NULL DEFAULT 0;`,
+            (alterErr) => {
+              if (alterErr && !/duplicate column/i.test(alterErr.message)) {
+                db.run("ROLLBACK");
+                return reject(alterErr);
+              }
+              db.run("PRAGMA user_version = 3;", (verErr) => {
+                if (verErr) {
+                  db.run("ROLLBACK");
+                  return reject(verErr);
+                }
+                db.run("COMMIT", (commitErr) =>
+                  commitErr ? reject(commitErr) : resolve()
+                );
+              });
+            }
+          );
+        });
+        return;
       }
 
       // No migration needed
@@ -122,7 +142,8 @@ CREATE TABLE IF NOT EXISTS bots (
     link_parameters         TEXT    NOT NULL,             -- Link parameters (LinkParameters: 'all', 'source', 'medium', 'none')
     updated                 TEXT    NOT NULL,             -- ISO datetime
     proxy                   TEXT,                         -- Proxy URL (opcional)
-    auth                    TEXT                          -- Proxy URL (opcional)
+    auth                    TEXT,                         -- Proxy URL (opcional)
+    sending_report          INTEGER NOT NULL DEFAULT 0    -- 0 = false, 1 = true (send report after sending messages)
 );
 
 -- Bot configuration keys (N:N)
