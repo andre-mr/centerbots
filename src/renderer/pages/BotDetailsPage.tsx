@@ -332,7 +332,7 @@ const BotDetailsPage: React.FC<BotDetailsProps> = ({
               className="font-semibold text-gray-700 dark:text-gray-200"
               htmlFor="whatsAppSources"
             >
-              Origem das Mensagens
+              Origem das mensagens
             </label>
             <select
               id="whatsAppSources"
@@ -389,7 +389,7 @@ const BotDetailsPage: React.FC<BotDetailsProps> = ({
               className="font-semibold text-gray-700 dark:text-gray-200"
               htmlFor="sendingReport"
             >
-              Relatório de envio
+              Relatório de envios
             </label>
             <select
               id="sendingReport"

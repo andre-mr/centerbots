@@ -560,7 +560,7 @@ export async function createBot(bot: Bot): Promise<number> {
       wa_number, campaign, whatsapp_sources, send_method, link_required, sending_report,
       delay_between_groups, delay_between_messages, link_parameters, updated, proxy
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
   const { lastID } = await run(sql, [
     bot.WaNumber || null,

@@ -731,14 +731,14 @@ export class WaManager {
         });
 
         try {
-          if (
-            instance.bot.SendMethod !== SendMethods.Forward &&
-            Math.random() < 0.5
-          ) {
-            await instance.socket.sendPresenceUpdate("composing", groupJid);
-            await delay(100 + Math.floor(Math.random() * 900));
-            await instance.socket.sendPresenceUpdate("paused", groupJid);
-          }
+          // if (
+          //   instance.bot.SendMethod !== SendMethods.Forward &&
+          //   Math.random() < 0.5
+          // ) {
+          //   await instance.socket.sendPresenceUpdate("composing", groupJid);
+          //   await delay(100 + Math.floor(Math.random() * 900));
+          //   await instance.socket.sendPresenceUpdate("paused", groupJid);
+          // }
           await sendMessageToGroupWithTimeout(
             instance,
             message,
