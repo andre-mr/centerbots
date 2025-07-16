@@ -118,13 +118,13 @@ if (!gotTheLock) {
 
     await dbReady;
 
-    checkLicense(import.meta.env.MAIN_VITE_API_URL || "", mainWindow!);
-
     try {
-      await purgeOldMessages(30);
+      await purgeOldMessages();
     } catch (err) {
       console.error("❌ Error purging old messages!");
     }
+
+    checkLicense(import.meta.env.MAIN_VITE_API_URL || "", mainWindow!);
 
     const waManager = getWaManager(mainWindow);
 
@@ -140,6 +140,11 @@ if (!gotTheLock) {
           import.meta.env.MAIN_VITE_API_URL || "",
           mainWindow!
         );
+        try {
+          await purgeOldMessages();
+        } catch (err) {
+          console.error("❌ Error purging old messages (cron)!");
+        }
       } catch (err) {
         console.error("❌ Error checking license!");
       }

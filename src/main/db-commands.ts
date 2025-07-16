@@ -911,12 +911,29 @@ export async function createGroupMember(
   return changes > 0 ? lastID : 0;
 }
 
-export async function purgeOldMessages(days: number = 30): Promise<number> {
-  const cutoff = new Date(
-    Date.now() - days * 24 * 60 * 60 * 1000
+export async function purgeOldMessages(): Promise<number> {
+  const cutoff30 = new Date(
+    Date.now() - 30 * 24 * 60 * 60 * 1000
   ).toISOString();
-  const sql = `DELETE FROM messages WHERE timestamp < ?`;
-  const { changes } = await run(sql, [cutoff]);
+  const cutoff7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { changes } = await run(`DELETE FROM messages WHERE timestamp < ?`, [
+    cutoff30,
+  ]);
+
+  const updateResult = await run(
+    `UPDATE messages SET image = NULL WHERE timestamp < ? AND image IS NOT NULL`,
+    [cutoff7]
+  );
+
+  if (updateResult.changes > 0) {
+    try {
+      await run(`VACUUM`);
+    } catch (err) {
+      console.error("Error running VACUUM:", err);
+    }
+  }
+
   return changes;
 }
 

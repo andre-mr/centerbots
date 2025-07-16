@@ -5,6 +5,7 @@ import {
   fetchLatestBaileysVersion,
   AuthenticationCreds,
   downloadMediaMessage,
+  GroupMetadata,
 } from "baileys";
 import { initAuthCreds } from "baileys/lib/Utils/auth-utils.js";
 import { BufferJSON } from "baileys/lib/Utils/generics.js";
@@ -68,6 +69,7 @@ type BotInstance = {
   reconnectAttempts: number;
   manualDisconnect: boolean;
   isConnecting: boolean;
+  isSyncingGroups: boolean;
   stop: (() => Promise<void>) | null;
   sentCount: number;
 };
@@ -107,6 +109,7 @@ export class WaManager {
         authorizedNumbers,
         manualDisconnect: false,
         isConnecting: false,
+        isSyncingGroups: false,
         groupMetadataCache: null,
         lastGroupFetch: null,
         broadcastGroupJids: null,
@@ -180,7 +183,9 @@ export class WaManager {
           if (!groupId) {
             const existingId = await getGroupIdByJid(groupJid);
             if (!existingId) {
-              continue;
+              await commitTransaction();
+              await this.updateBotGroupsAndMembersStats(botId);
+              return;
             }
             groupId = existingId;
           }
@@ -193,7 +198,9 @@ export class WaManager {
         if (groupId > 0) {
           await createBotGroup(botId, groupId, 0);
         } else {
-          continue;
+          await commitTransaction();
+          await this.updateBotGroupsAndMembersStats(botId);
+          return;
         }
 
         const localMembers = await getMembersByGroupId(groupId);
@@ -227,6 +234,8 @@ export class WaManager {
       }
       await deleteOrphanGroups();
       await commitTransaction();
+
+      await this.updateBotGroupsAndMembersStats(botId);
     } catch (err) {
       console.error(
         "❌ Error during group sync, rolling back transaction:",
@@ -234,6 +243,111 @@ export class WaManager {
       );
       await rollbackTransaction();
       throw err;
+    } finally {
+      this.syncLock = false;
+    }
+  }
+
+  async handleGroupUpsert(botId: number, group: GroupMetadata) {
+    this.syncLock = true;
+    try {
+      await beginTransaction();
+      const groupId = await createGroup(
+        new Group(0, group.id, group.subject, group.participants.length)
+      );
+      if (groupId > 0) {
+        await createBotGroup(botId, groupId, 0);
+        for (const p of group.participants) {
+          const memberId = await getOrCreateMemberId(p.id);
+          await createGroupMember(groupId, memberId, !!p.admin);
+        }
+      }
+      await commitTransaction();
+      await this.updateBotGroupsAndMembersStats(botId);
+    } catch (err) {
+      // console.error("❌ Error during handleGroupUpsert, rolling back:", err);
+      await rollbackTransaction();
+    } finally {
+      this.syncLock = false;
+    }
+  }
+
+  async handleGroupMetadataUpdate(
+    botId: number,
+    update: Partial<GroupMetadata>
+  ) {
+    this.syncLock = true;
+    try {
+      const groupId = await getGroupIdByJid(update.id!);
+      if (groupId) {
+        await updateGroup(
+          new Group(groupId, update.id!, update.subject!, update.size!)
+        );
+        await this.updateBotGroupsAndMembersStats(botId);
+      }
+    } catch (err) {
+      // console.error("❌ Error during handleGroupMetadataUpdate:", err);
+    } finally {
+      this.syncLock = false;
+    }
+  }
+
+  async handleBotLeftGroup(botId: number, groupId: number) {
+    this.syncLock = true;
+    try {
+      await deleteBotGroup(botId, groupId);
+      await deleteOrphanGroups();
+      await deleteOrphanMembers();
+      await this.updateBotGroupsAndMembersStats(botId);
+    } catch (err) {
+      // console.error("❌ Error during handleBotLeftGroup:", err);
+    } finally {
+      this.syncLock = false;
+    }
+  }
+
+  async handleGroupParticipantsUpdate(
+    botId: number,
+    update: { id: string; action: string; participants: string[] }
+  ) {
+    this.syncLock = true;
+    try {
+      await beginTransaction();
+      const groupId = await getGroupIdByJid(update.id);
+      if (!groupId) {
+        await rollbackTransaction();
+        return;
+      }
+
+      for (const pJid of update.participants) {
+        if (update.action === "add") {
+          const memberId = await getOrCreateMemberId(pJid);
+          await createGroupMember(groupId, memberId, false);
+        } else if (update.action === "remove") {
+          const memberId = await getOrCreateMemberId(pJid);
+          await deleteGroupMember(groupId, memberId);
+        } else if (update.action === "promote" || update.action === "demote") {
+          const memberId = await getOrCreateMemberId(pJid);
+          await updateGroupMemberAdmin(
+            groupId,
+            memberId,
+            update.action === "promote"
+          );
+        }
+      }
+
+      if (update.action === "remove") {
+        await deleteOrphanMembers();
+      }
+
+      await commitTransaction();
+      await this.updateBotGroupsAndMembersStats(botId);
+    } catch (err) {
+      // console.error(
+      //   "❌ Error during handleGroupParticipantsUpdate, rolling back:",
+      //   err
+      // );
+      await rollbackTransaction();
     } finally {
       this.syncLock = false;
     }
@@ -356,17 +470,22 @@ export class WaManager {
           !instance.lastGroupFetch ||
           now - instance.lastGroupFetch > 600_000
         ) {
-          let groupMetadataCache = await sock.groupFetchAllParticipating();
-          groupMetadataCache = Object.fromEntries(
-            Object.entries(groupMetadataCache).sort(([, a], [, b]) =>
-              (a.subject || "")
-                .toLowerCase()
-                .localeCompare((b.subject || "").toLowerCase())
-            )
-          );
-          instance.groupMetadataCache = groupMetadataCache;
-          instance.lastGroupFetch = now;
-          await this.syncBotGroupsAndMembers(bot.Id, groupMetadataCache);
+          instance.isSyncingGroups = true;
+          try {
+            let groupMetadataCache = await sock.groupFetchAllParticipating();
+            groupMetadataCache = Object.fromEntries(
+              Object.entries(groupMetadataCache).sort(([, a], [, b]) =>
+                (a.subject || "")
+                  .toLowerCase()
+                  .localeCompare((b.subject || "").toLowerCase())
+              )
+            );
+            instance.groupMetadataCache = groupMetadataCache;
+            instance.lastGroupFetch = now;
+            await this.syncBotGroupsAndMembers(bot.Id, groupMetadataCache);
+          } finally {
+            instance.isSyncingGroups = false;
+          }
         }
 
         const state = this.botQueueStates.get(bot.Id);
@@ -578,6 +697,127 @@ export class WaManager {
           botId: bot.Id,
           messageQueue: botInstance?.messageQueue || [],
         });
+      }
+    });
+
+    sock.ev.on("groups.upsert", async (groupsUpsert: GroupMetadata[]) => {
+      const instance = this.bots.get(bot.Id);
+      if (!instance || !instance.bot.Active || groupsUpsert.length <= 0) return;
+
+      for (const group of groupsUpsert) {
+        if (group.id && !instance.groupMetadataCache?.[group.id]) {
+          instance.groupMetadataCache = {
+            ...instance.groupMetadataCache,
+            [group.id]: group,
+          };
+          await this.handleGroupUpsert(bot.Id, group);
+        }
+      }
+    });
+
+    sock.ev.on(
+      "groups.update",
+      async (groupsUpdate: Partial<GroupMetadata>[]) => {
+        const instance = this.bots.get(bot.Id);
+        if (
+          !instance ||
+          !instance.bot.Active ||
+          groupsUpdate?.length <= 0 ||
+          instance.isSyncingGroups
+        ) {
+          return;
+        }
+
+        for (const update of groupsUpdate) {
+          if (update.id && instance.groupMetadataCache?.[update.id]) {
+            const prev = instance.groupMetadataCache[update.id];
+            const updatedMeta = { ...prev, ...update };
+
+            if (
+              prev.subject !== updatedMeta.subject ||
+              prev.size !== updatedMeta.size
+            ) {
+              instance.groupMetadataCache[update.id] = updatedMeta;
+              await this.handleGroupMetadataUpdate(bot.Id, updatedMeta);
+            }
+          }
+        }
+      }
+    );
+
+    sock.ev.on("group-participants.update", async (groupParticipantsUpdate) => {
+      const instance = this.bots.get(bot.Id);
+      if (!instance || !instance.bot.Active) return;
+
+      const { id: groupJid, action, participants } = groupParticipantsUpdate;
+      const botWaNumber = instance.bot.WaNumber;
+
+      if (
+        action === "remove" &&
+        botWaNumber &&
+        participants.some((p) => p.includes(botWaNumber))
+      ) {
+        if (instance.groupMetadataCache?.[groupJid]) {
+          delete instance.groupMetadataCache[groupJid];
+        }
+        const groupId = await getGroupIdByJid(groupJid);
+        if (groupId) {
+          await this.handleBotLeftGroup(bot.Id, groupId);
+        }
+        return;
+      }
+
+      if (!instance.groupMetadataCache?.[groupJid]) return;
+
+      const group = instance.groupMetadataCache[groupJid];
+      let cacheUpdated = false;
+
+      if (["add", "remove", "promote", "demote"].includes(action)) {
+        if (group.participants && Array.isArray(group.participants)) {
+          if (action === "add") {
+            for (const jid of participants) {
+              if (!group.participants.some((p: any) => p.id === jid)) {
+                group.participants.push({ id: jid, admin: null });
+                cacheUpdated = true;
+              }
+            }
+          } else if (action === "remove") {
+            const before = group.participants.length;
+            group.participants = group.participants.filter(
+              (p: any) => !participants.includes(p.id)
+            );
+            if (group.participants.length !== before) cacheUpdated = true;
+          } else if (action === "promote") {
+            for (const jid of participants) {
+              const participant = group.participants.find(
+                (p: any) => p.id === jid
+              );
+              if (participant && participant.admin !== "admin") {
+                participant.admin = "admin";
+                cacheUpdated = true;
+              }
+            }
+          } else if (action === "demote") {
+            for (const jid of participants) {
+              const participant = group.participants.find(
+                (p: any) => p.id === jid
+              );
+              if (participant && participant.admin !== null) {
+                participant.admin = null;
+                cacheUpdated = true;
+              }
+            }
+          }
+          instance.groupMetadataCache[groupJid] = group;
+        }
+      }
+
+      if (cacheUpdated) {
+        instance.groupMetadataCache[groupJid] = group;
+        await this.handleGroupParticipantsUpdate(
+          bot.Id,
+          groupParticipantsUpdate
+        );
       }
     });
 
@@ -1054,6 +1294,17 @@ export class WaManager {
     this.mainWindow.webContents.send("bot:qrCode", {
       botId: instance.bot.Id,
       qr: "",
+    });
+  }
+
+  private async updateBotGroupsAndMembersStats(botId: number) {
+    const stats = await getBotGroupsAndMembers(botId);
+    this.mainWindow.webContents.send("bot:groupsAndMembersStatsUpdate", {
+      botId,
+      stats: {
+        broadcastGroups: stats.broadcastGroups,
+        broadcastMembers: stats.broadcastMembers,
+      },
     });
   }
 }
