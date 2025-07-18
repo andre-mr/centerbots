@@ -856,16 +856,6 @@ export class WaManager {
       return;
     }
 
-    if (instance.bot.SendingReport) {
-      if (instance.sentCount <= 0 || instance.messageQueue.length === 0) {
-        instance.sentCount = 1;
-      } else {
-        instance.sentCount++;
-      }
-    } else {
-      instance.sentCount = 0;
-    }
-
     instance.messageQueue.push(message);
 
     if (!instance.bot.sendingMessageInfo) {
@@ -938,6 +928,12 @@ export class WaManager {
       const totalGroups = groupIds.filter((groupJid) =>
         broadcastSet?.has(groupJid)
       ).length;
+
+      if (instance.bot.SendingReport) {
+        instance.sentCount++;
+      } else {
+        instance.sentCount = 0;
+      }
 
       while (
         !state.paused &&

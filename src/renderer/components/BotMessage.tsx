@@ -62,8 +62,8 @@ const BotMessage: React.FC<BotMessageProps> = ({
     <div
       key={msg.Id || idx}
       className={
-        `mb-2 flex flex-col gap-1 rounded border-b border-gray-200 p-1 text-sm shadow last:border-0 dark:border-gray-700 ` +
-        `${isFirst ? "relative overflow-hidden bg-emerald-50 ring-2 ring-emerald-400 ring-opacity-60 dark:bg-emerald-950" : ""} `
+        `mb-2 flex flex-col gap-1 rounded border-gray-200 p-1 text-sm shadow-md last:border-0 dark:border-gray-700 ` +
+        `${isFirst ? "relative bg-emerald-50 ring-2 ring-emerald-400 ring-opacity-60 dark:bg-emerald-950" : ""} `
       }
     >
       {isFirst && (
