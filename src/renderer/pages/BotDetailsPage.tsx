@@ -171,10 +171,10 @@ const BotDetailsPage: React.FC<BotDetailsProps> = ({
         await window.appApi.updateBot(botToSave);
       }
       onCancel();
-    } catch (err) {
+    } catch (error) {
       setError(
-        err instanceof Error
-          ? err.message
+        error instanceof Error
+          ? error.message
           : `Ocorreu um erro ao ${isNew ? "criar" : "salvar"}`
       );
     } finally {
@@ -188,9 +188,9 @@ const BotDetailsPage: React.FC<BotDetailsProps> = ({
     try {
       await window.appApi.deleteBot(formData.Id);
       onCancel();
-    } catch (err) {
+    } catch (error) {
       setError(
-        err instanceof Error ? err.message : "Ocorreu um erro ao excluir"
+        error instanceof Error ? error.message : "Ocorreu um erro ao excluir"
       );
     } finally {
       setIsLoading(false);

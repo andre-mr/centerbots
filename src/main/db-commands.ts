@@ -18,8 +18,8 @@ import { GlobalStats } from "../models/global-stats";
 
 function all<T>(sql: string, params: any[] = []): Promise<T[]> {
   return new Promise((resolve, reject) => {
-    database.all(sql, params, (err, rows) => {
-      if (err) return reject(err);
+    database.all(sql, params, (error, rows) => {
+      if (error) return reject(error);
       resolve(rows as T[]);
     });
   });
@@ -27,8 +27,8 @@ function all<T>(sql: string, params: any[] = []): Promise<T[]> {
 
 function get<T>(sql: string, params: any[] = []): Promise<T | undefined> {
   return new Promise((resolve, reject) => {
-    database.get(sql, params, (err, row) => {
-      if (err) return reject(err);
+    database.get(sql, params, (error, row) => {
+      if (error) return reject(error);
       resolve(row as T | undefined);
     });
   });
@@ -39,8 +39,8 @@ function run(
   params: any[] = []
 ): Promise<{ lastID: number; changes: number }> {
   return new Promise((resolve, reject) => {
-    database.run(sql, params, function (err) {
-      if (err) return reject(err);
+    database.run(sql, params, function (error) {
+      if (error) return reject(error);
       resolve({ lastID: this.lastID, changes: this.changes });
     });
   });
@@ -50,8 +50,8 @@ function run(
 
 export function beginTransaction(): Promise<void> {
   return new Promise((resolve, reject) => {
-    database.run("BEGIN TRANSACTION", (err) => {
-      if (err) return reject(err);
+    database.run("BEGIN TRANSACTION", (error) => {
+      if (error) return reject(error);
       resolve();
     });
   });
@@ -59,8 +59,8 @@ export function beginTransaction(): Promise<void> {
 
 export function commitTransaction(): Promise<void> {
   return new Promise((resolve, reject) => {
-    database.run("COMMIT", (err) => {
-      if (err) return reject(err);
+    database.run("COMMIT", (error) => {
+      if (error) return reject(error);
       resolve();
     });
   });
@@ -68,8 +68,8 @@ export function commitTransaction(): Promise<void> {
 
 export function rollbackTransaction(): Promise<void> {
   return new Promise((resolve, reject) => {
-    database.run("ROLLBACK", (err) => {
-      if (err) return reject(err);
+    database.run("ROLLBACK", (error) => {
+      if (error) return reject(error);
       resolve();
     });
   });
@@ -91,7 +91,9 @@ export async function getAppSettings(): Promise<AppSettings | null> {
       machine_id,
       last_ip,
       last_checkin,
-      platform
+      platform,
+      last_sync,
+      sync_interval
     FROM app_config
     WHERE id = 1
   `;
@@ -108,6 +110,8 @@ export async function getAppSettings(): Promise<AppSettings | null> {
     last_ip: string | null;
     last_checkin: string;
     platform: string | null;
+    last_sync: string;
+    sync_interval: number;
   }>(sql).then((row) => {
     if (row) {
       const settings = new AppSettings();
@@ -126,6 +130,8 @@ export async function getAppSettings(): Promise<AppSettings | null> {
       settings.LastIP = row.last_ip;
       settings.LastCheckin = row.last_checkin;
       settings.Platform = row.platform || "";
+      settings.LastSync = row.last_sync || "";
+      settings.SyncInterval = row.sync_interval ?? 0;
       return settings;
     }
     return null;
@@ -145,7 +151,9 @@ export async function updateAppSettings(settings: AppSettings): Promise<void> {
            machine_id = ?,
            last_ip = ?,
            last_checkin = ?,
-           platform = ?
+           platform = ?,
+           last_sync = ?,
+           sync_interval = ?
      WHERE id = 1
   `;
   await run(sql, [
@@ -160,6 +168,8 @@ export async function updateAppSettings(settings: AppSettings): Promise<void> {
     settings.LastIP,
     settings.LastCheckin,
     settings.Platform,
+    settings.LastSync,
+    settings.SyncInterval,
   ]);
 }
 
@@ -167,14 +177,19 @@ export async function updateAppSettings(settings: AppSettings): Promise<void> {
 
 export async function createGroup(group: Group): Promise<number> {
   const sql = `
-    INSERT OR IGNORE INTO groups (group_jid, name)
-    VALUES (?, ?)
+    INSERT OR IGNORE INTO groups (group_jid, name, updated, invite_link)
+    VALUES (?, ?, ?, ?)
   `;
   try {
-    const { lastID, changes } = await run(sql, [group.GroupJid, group.Name]);
+    const { lastID, changes } = await run(sql, [
+      group.GroupJid,
+      group.Name,
+      group.Updated ?? new Date().toISOString(),
+      group.InviteLink ?? "",
+    ]);
     return changes > 0 ? lastID : 0;
-  } catch (err) {
-    throw err;
+  } catch (error) {
+    throw error;
   }
 }
 
@@ -182,10 +197,33 @@ export async function updateGroup(group: Group): Promise<void> {
   const sql = `
     UPDATE groups
        SET group_jid = ?,
-           name     = ?
+           name     = ?,
+           updated  = ?,
+           invite_link = ?
      WHERE id = ?
   `;
-  await run(sql, [group.GroupJid, group.Name, group.Id]);
+  await run(sql, [
+    group.GroupJid,
+    group.Name,
+    group.Updated ?? new Date().toISOString(),
+    group.InviteLink ?? "",
+    group.Id,
+  ]);
+}
+
+export async function markInviteLinksAsSynced(
+  groupIds: number[]
+): Promise<void> {
+  if (groupIds.length === 0) {
+    return;
+  }
+  const placeholders = groupIds.map(() => "?").join(",");
+  const sql = `
+    UPDATE groups
+       SET invite_link = invite_link || ':sync'
+     WHERE id IN (${placeholders})
+  `;
+  await run(sql, groupIds);
 }
 
 export async function deleteGroup(id: number): Promise<void> {
@@ -199,6 +237,8 @@ export async function getGroupById(id: number): Promise<Group | null> {
       g.id,
       g.group_jid,
       g.name,
+      g.updated,
+      g.invite_link,
       COUNT(gm.member_id) AS total_members
     FROM groups AS g
     LEFT JOIN group_members AS gm
@@ -210,9 +250,21 @@ export async function getGroupById(id: number): Promise<Group | null> {
     id: number;
     group_jid: string;
     name: string;
+    updated: string;
+    invite_link: string;
     total_members: number;
   }>(sql, [id]).then((row) =>
-    row ? new Group(row.id, row.group_jid, row.name, row.total_members) : null
+    row
+      ? new Group(
+          row.id,
+          row.group_jid,
+          row.name,
+          row.updated,
+          row.invite_link,
+          row.total_members,
+          undefined
+        )
+      : null
   );
 }
 
@@ -234,6 +286,8 @@ export async function getAllGroups(): Promise<Group[]> {
       g.id,
       g.group_jid,
       g.name,
+      g.updated,
+      g.invite_link,
       COUNT(gm.member_id) AS total_members
     FROM groups AS g
     LEFT JOIN group_members AS gm
@@ -244,9 +298,22 @@ export async function getAllGroups(): Promise<Group[]> {
     id: number;
     group_jid: string;
     name: string;
+    updated: string;
+    invite_link: string;
     total_members: number;
   }>(sql).then((rows) =>
-    rows.map((r) => new Group(r.id, r.group_jid, r.name, r.total_members))
+    rows.map(
+      (r) =>
+        new Group(
+          r.id,
+          r.group_jid,
+          r.name,
+          r.updated,
+          r.invite_link,
+          r.total_members,
+          undefined
+        )
+    )
   );
 }
 
@@ -256,6 +323,8 @@ export async function getGroupsByName(part: string): Promise<Group[]> {
       g.id,
       g.group_jid,
       g.name,
+      g.updated,
+      g.invite_link,
       COUNT(gm.member_id) AS total_members
     FROM groups AS g
     LEFT JOIN group_members AS gm
@@ -267,9 +336,22 @@ export async function getGroupsByName(part: string): Promise<Group[]> {
     id: number;
     group_jid: string;
     name: string;
+    updated: string;
+    invite_link: string;
     total_members: number;
   }>(sql, [`%${part}%`]).then((rows) =>
-    rows.map((r) => new Group(r.id, r.group_jid, r.name, r.total_members))
+    rows.map(
+      (r) =>
+        new Group(
+          r.id,
+          r.group_jid,
+          r.name,
+          r.updated,
+          r.invite_link,
+          r.total_members,
+          undefined
+        )
+    )
   );
 }
 
@@ -279,6 +361,8 @@ export async function getGroupsByBotId(botId: number): Promise<Group[]> {
       g.id,
       g.group_jid,
       g.name,
+      g.updated,
+      g.invite_link,
       COUNT(gm.member_id) AS total_members,
       bg.broadcast
     FROM groups AS g
@@ -293,12 +377,21 @@ export async function getGroupsByBotId(botId: number): Promise<Group[]> {
     id: number;
     group_jid: string;
     name: string;
+    updated: string;
+    invite_link: string;
     total_members: number;
     broadcast: number;
   }>(sql, [botId]).then((rows) =>
     rows.map((r) => {
-      const group = new Group(r.id, r.group_jid, r.name, r.total_members);
-      group.Broadcast = !!r.broadcast;
+      const group = new Group(
+        r.id,
+        r.group_jid,
+        r.name,
+        r.updated,
+        r.invite_link,
+        r.total_members,
+        !!r.broadcast
+      );
       return group;
     })
   );
@@ -310,6 +403,8 @@ export async function getGroupsByMemberId(memberId: string): Promise<Group[]> {
       g.id,
       g.group_jid,
       g.name,
+      g.updated,
+      g.invite_link,
       COUNT(gm_all.id) AS total_members
     FROM groups AS g
     JOIN group_members AS gm
@@ -323,9 +418,22 @@ export async function getGroupsByMemberId(memberId: string): Promise<Group[]> {
     id: number;
     group_jid: string;
     name: string;
+    updated: string;
+    invite_link: string;
     total_members: number;
   }>(sql, [memberId]).then((rows) =>
-    rows.map((r) => new Group(r.id, r.group_jid, r.name, r.total_members))
+    rows.map(
+      (r) =>
+        new Group(
+          r.id,
+          r.group_jid,
+          r.name,
+          r.updated,
+          r.invite_link,
+          r.total_members,
+          undefined
+        )
+    )
   );
 }
 
@@ -835,8 +943,8 @@ export async function createBotGroup(
   try {
     const { lastID, changes } = await run(sql, [botId, groupId, broadcast]);
     return changes > 0 ? lastID : 0;
-  } catch (err) {
-    throw err;
+  } catch (error) {
+    throw error;
   }
 }
 
@@ -929,8 +1037,8 @@ export async function purgeOldMessages(): Promise<number> {
   if (updateResult.changes > 0) {
     try {
       await run(`VACUUM`);
-    } catch (err) {
-      console.error("Error running VACUUM:", err);
+    } catch (error) {
+      console.error("❌ Error running VACUUM:", error);
     }
   }
 

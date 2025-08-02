@@ -8,114 +8,135 @@ fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
 sqlite3.verbose();
 
-function migrate(db: sqlite3.Database): Promise<void> {
+function run(
+  db: sqlite3.Database,
+  sql: string,
+  params: any[] = []
+): Promise<void> {
   return new Promise((resolve, reject) => {
-    db.get("PRAGMA user_version", (err, row: any) => {
-      if (err) return reject(err);
-      const current = row?.user_version ?? 0;
-
-      if (current < 1) {
-        /* ------------------------------ Migration for version 1 ----------------------------- */
-        db.serialize(() => {
-          db.run("BEGIN");
-          db.run(`ALTER TABLE bots ADD COLUMN auth TEXT;`, (alterErr) => {
-            if (alterErr && !/duplicate column/i.test(alterErr.message)) {
-              db.run("ROLLBACK");
-              return reject(alterErr);
-            }
-
-            db.run(
-              `CREATE TABLE IF NOT EXISTS bot_keys (
-                   bot_id     INTEGER NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
-                   category   TEXT    NOT NULL,
-                   key_id     TEXT    NOT NULL,
-                   value_json TEXT    NOT NULL,
-                   PRIMARY KEY (bot_id, category, key_id)
-                 );`,
-              (createErr) => {
-                if (createErr) {
-                  db.run("ROLLBACK");
-                  return reject(createErr);
-                }
-
-                db.run("PRAGMA user_version = 1;", (verErr) => {
-                  if (verErr) {
-                    db.run("ROLLBACK");
-                    return reject(verErr);
-                  }
-                  db.run("COMMIT", (commitErr) =>
-                    commitErr ? reject(commitErr) : resolve()
-                  );
-                });
-              }
-            );
-          });
-        });
-        return;
-      }
-
-      if (current < 2) {
-        /* ------------------------------ Migration for version 2 ----------------------------- */
-        db.serialize(() => {
-          db.run("BEGIN");
-          db.run(
-            `ALTER TABLE bots ADD COLUMN link_required INTEGER NOT NULL DEFAULT 0;`,
-            (alterErr) => {
-              if (alterErr && !/duplicate column/i.test(alterErr.message)) {
-                db.run("ROLLBACK");
-                return reject(alterErr);
-              }
-              db.run("PRAGMA user_version = 2;", (verErr) => {
-                if (verErr) {
-                  db.run("ROLLBACK");
-                  return reject(verErr);
-                }
-                db.run("COMMIT", (commitErr) =>
-                  commitErr ? reject(commitErr) : resolve()
-                );
-              });
-            }
-          );
-        });
-        return;
-      }
-
-      if (current < 3) {
-        /* ------------------------------ Migration for version 3 ----------------------------- */
-        db.serialize(() => {
-          db.run("BEGIN");
-          db.run(
-            `ALTER TABLE bots ADD COLUMN sending_report INTEGER NOT NULL DEFAULT 0;`,
-            (alterErr) => {
-              if (alterErr && !/duplicate column/i.test(alterErr.message)) {
-                db.run("ROLLBACK");
-                return reject(alterErr);
-              }
-              db.run("PRAGMA user_version = 3;", (verErr) => {
-                if (verErr) {
-                  db.run("ROLLBACK");
-                  return reject(verErr);
-                }
-                db.run("COMMIT", (commitErr) =>
-                  commitErr ? reject(commitErr) : resolve()
-                );
-              });
-            }
-          );
-        });
-        return;
-      }
-
-      // No migration needed
-      resolve();
-    });
+    db.run(sql, params, (error) => (error ? reject(error) : resolve()));
   });
+}
+
+function get<T>(
+  db: sqlite3.Database,
+  sql: string,
+  params: any[] = []
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (error, row: T) => (error ? reject(error) : resolve(row)));
+  });
+}
+
+async function migrate(db: sqlite3.Database): Promise<void> {
+  const LATEST_VERSION = 4;
+  let row: any = await get(db, "PRAGMA user_version");
+  let currentVersion = row?.user_version ?? 0;
+
+  while (currentVersion < LATEST_VERSION) {
+    await run(db, "BEGIN");
+    try {
+      if (currentVersion < 1) {
+        /* ------------------------------ Migration for version 1 ----------------------------- */
+        try {
+          await run(db, `ALTER TABLE bots ADD COLUMN auth TEXT;`);
+        } catch (err: any) {
+          if (!/duplicate column/i.test(err.message)) throw err;
+        }
+        await run(
+          db,
+          `CREATE TABLE IF NOT EXISTS bot_keys (
+             bot_id     INTEGER NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
+             category   TEXT    NOT NULL,
+             key_id     TEXT    NOT NULL,
+             value_json TEXT    NOT NULL,
+             PRIMARY KEY (bot_id, category, key_id)
+           );`
+        );
+        currentVersion = 1;
+      } else if (currentVersion < 2) {
+        /* ------------------------------ Migration for version 2 ----------------------------- */
+        try {
+          await run(
+            db,
+            `ALTER TABLE bots ADD COLUMN link_required INTEGER NOT NULL DEFAULT 0;`
+          );
+        } catch (err: any) {
+          if (!/duplicate column/i.test(err.message)) throw err;
+        }
+        currentVersion = 2;
+      } else if (currentVersion < 3) {
+        /* ------------------------------ Migration for version 3 ----------------------------- */
+        try {
+          await run(
+            db,
+            `ALTER TABLE bots ADD COLUMN sending_report INTEGER NOT NULL DEFAULT 0;`
+          );
+        } catch (err: any) {
+          if (!/duplicate column/i.test(err.message)) throw err;
+        }
+        currentVersion = 3;
+      } else if (currentVersion < 4) {
+        /* ------------------------------ Migration for version 4 ----------------------------- */
+        await run(
+          db,
+          `UPDATE bots SET link_parameters = 
+            CASE link_parameters
+              WHEN 'all' THEN 'All'
+              WHEN 'source' THEN 'Source'
+              WHEN 'medium' THEN 'Medium'
+              WHEN 'none' THEN 'None'
+              ELSE link_parameters
+            END`
+        );
+        try {
+          await run(
+            db,
+            `ALTER TABLE groups ADD COLUMN updated TEXT NOT NULL DEFAULT ''`
+          );
+        } catch (err: any) {
+          if (!/duplicate column/i.test(err.message)) throw err;
+        }
+        try {
+          await run(
+            db,
+            `ALTER TABLE groups ADD COLUMN invite_link TEXT NOT NULL DEFAULT ''`
+          );
+        } catch (err: any) {
+          if (!/duplicate column/i.test(err.message)) throw err;
+        }
+        try {
+          await run(
+            db,
+            `ALTER TABLE app_config ADD COLUMN last_sync TEXT NOT NULL DEFAULT ''`
+          );
+        } catch (err: any) {
+          if (!/duplicate column/i.test(err.message)) throw err;
+        }
+        try {
+          await run(
+            db,
+            `ALTER TABLE app_config ADD COLUMN sync_interval INTEGER NOT NULL DEFAULT 0`
+          );
+        } catch (err: any) {
+          if (!/duplicate column/i.test(err.message)) throw err;
+        }
+        currentVersion = 4;
+      }
+
+      await run(db, `PRAGMA user_version = ${currentVersion}`);
+      await run(db, "COMMIT");
+    } catch (error) {
+      await run(db, "ROLLBACK");
+      throw error;
+    }
+  }
 }
 
 const schema = `
 -- General application configuration
 CREATE TABLE IF NOT EXISTS app_config (
-    id                  INTEGER PRIMARY KEY CHECK (id = 1), -- ensures only one row
+    id                  INTEGER PRIMARY KEY CHECK (id = 1),  -- ensures only one row
     license_key         TEXT,                                -- License key for activation
     dark_mode           INTEGER NOT NULL DEFAULT 0,          -- 0 = false, 1 = true (UI theme)
     user_id             TEXT,                                -- User identifier
@@ -126,7 +147,9 @@ CREATE TABLE IF NOT EXISTS app_config (
     machine_id          TEXT,                                -- Unique machine identifier
     last_ip             TEXT,                                -- Last known public IP address
     last_checkin        TEXT    NOT NULL,                    -- ISO datetime of last license check
-    platform            TEXT                                 -- OS platform (windows, linux, darwin, etc.)
+    platform            TEXT,                                -- OS platform (windows, linux, darwin, etc.)
+    last_sync           TEXT    NOT NULL DEFAULT '',         -- ISO datetime of last server sync
+    sync_interval       INTEGER NOT NULL DEFAULT 0           -- Server sync interval
 );
 
 -- WhatsApp Bots
@@ -158,8 +181,10 @@ CREATE TABLE IF NOT EXISTS bot_keys (
 -- Groups
 CREATE TABLE IF NOT EXISTS groups (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    group_jid   TEXT    NOT NULL UNIQUE,    -- WhatsApp group ID
-    name        TEXT
+    group_jid   TEXT    NOT NULL UNIQUE,     -- WhatsApp group ID
+    name        TEXT,
+    updated     TEXT    NOT NULL DEFAULT '', -- ISO datetime
+    invite_link TEXT    NOT NULL DEFAULT ''  -- Invite link for the group
 );
 
 -- Members (WhatsApp accounts)
@@ -232,31 +257,31 @@ CREATE INDEX IF NOT EXISTS idx_message_bots_message_id ON bot_messages(message_i
 CREATE INDEX IF NOT EXISTS idx_message_bots_bot_id ON bot_messages(bot_id);
 `;
 
-const database = new sqlite3.Database(dbPath, (err) => {
-  if (err) {
+const database = new sqlite3.Database(dbPath, (error) => {
+  if (error) {
     console.error("❌ Error connecting to the database!");
-    throw err;
+    throw error;
   }
 });
 
 export const dbReady: Promise<void> = new Promise((resolve, reject) => {
-  database.run("PRAGMA foreign_keys = ON", (err) => {
-    if (err) {
+  database.run("PRAGMA foreign_keys = ON", (error) => {
+    if (error) {
       console.error("❌ Error enabling foreign keys!");
-      reject(err);
+      reject(error);
       return;
     }
-    database.exec(schema, (err) => {
-      if (err) {
+    database.exec(schema, (error) => {
+      if (error) {
         console.error("❌ Error configuring the database schema!");
-        reject(err);
+        reject(error);
         return;
       } else {
         migrate(database)
           .then(() => {
             const initSql = `
-            INSERT OR IGNORE INTO app_config (id, license_key, dark_mode, user_id, plan_status, plan_tier, registered_bots, app_version, machine_id, last_ip, last_checkin, platform)
-            VALUES (1, NULL, 0, NULL, 'Invalid', 'Basic', '[]', '1.1.0', NULL, NULL, '${new Date().toISOString()}', NULL);
+            INSERT OR IGNORE INTO app_config (id, license_key, dark_mode, user_id, plan_status, plan_tier, registered_bots, app_version, machine_id, last_ip, last_checkin, platform, last_sync, sync_interval)
+            VALUES (1, NULL, 0, NULL, 'Invalid', 'Basic', '[]', '1.1.0', NULL, NULL, '${new Date().toISOString()}', NULL, '', 0);
           `;
             database.run(initSql, (initErr) => {
               if (initErr) {

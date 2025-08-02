@@ -3,6 +3,8 @@ import {
   updateAppSettings,
   getDatabaseBackup,
   getAllBots,
+  getAllGroups,
+  markInviteLinksAsSynced,
 } from "./db-commands";
 import AppSettings from "../models/app-settings-model";
 import os from "os";
@@ -135,8 +137,8 @@ export async function checkLicense(
       return;
     }
     mainWindow.webContents.send("license:valid");
-  } catch (err) {
-    console.log("❌ Error checking license:", err);
+  } catch (error) {
+    console.error("❌ Error checking license:", error);
     try {
       let settings: AppSettings | null = await getAppSettings();
       if (settings) {
@@ -177,5 +179,109 @@ export async function checkLicense(
       console.error("❌ Error forcing status after license error!");
       mainWindow.webContents.send("license:invalid");
     }
+  }
+}
+
+export async function sendGroupsData(groupsApiUrl: string): Promise<void> {
+  try {
+    if (!groupsApiUrl) {
+      console.error("❌ Groups API URL not provided. Skipping sync.");
+      return;
+    }
+
+    const appSettings = await getAppSettings();
+    if (!appSettings) {
+      console.error("❌ Could not get app settings for group sync!");
+      return;
+    }
+
+    const allGroups = await getAllGroups();
+    const lastSync = appSettings.LastSync
+      ? new Date(appSettings.LastSync)
+      : null;
+    const now = new Date();
+    let includeAll = false;
+
+    if (!lastSync || now.getTime() - lastSync.getTime() > 24 * 60 * 60 * 1000) {
+      includeAll = true;
+    }
+
+    let groupsToSync = allGroups.filter((group) => {
+      if (includeAll) return true;
+      if (!group.Updated) return true;
+      const updatedDate = new Date(group.Updated);
+      return lastSync ? updatedDate > lastSync : true;
+    });
+
+    if (groupsToSync.length === 0) {
+      return;
+    }
+
+    const groupsData = groupsToSync.map((g) => {
+      return {
+        GroupJid: g.GroupJid,
+        InviteLink: g.InviteLink.endsWith(":sync") ? "" : g.InviteLink,
+        Members: g.TotalMembers,
+        Name: g.Name,
+        Updated: g.Updated,
+      };
+    });
+
+    const BATCH_SIZE = 100;
+    let allBatchesOk = true;
+    for (let i = 0; i < groupsData.length; i += BATCH_SIZE) {
+      const batch = groupsData.slice(i, i + BATCH_SIZE);
+      const payload = {
+        userData: {
+          UserId: appSettings.UserId,
+          LicenseKey: appSettings.LicenseKey,
+        },
+        groupsData: batch,
+      };
+
+      const response = await fetch(groupsApiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        const batchJids = new Set(batch.map((b) => b.GroupJid));
+        const originalGroupsInBatch = groupsToSync.filter((g) =>
+          batchJids.has(g.GroupJid)
+        );
+
+        const groupsToUpdate = originalGroupsInBatch.filter(
+          (g) => g.InviteLink && !g.InviteLink.endsWith(":sync")
+        );
+
+        if (groupsToUpdate.length > 0) {
+          try {
+            const groupIdsToUpdate = groupsToUpdate.map((g) => g.Id);
+            await markInviteLinksAsSynced(groupIdsToUpdate);
+          } catch (dbErr) {
+            console.error("❌ Error bulk updating groups after sync:", dbErr);
+          }
+        }
+      } else {
+        allBatchesOk = false;
+        console.error(
+          `❌ Failed to send groups data. Status: ${response.status} (batch ${
+            Math.floor(i / BATCH_SIZE) + 1
+          })`
+        );
+      }
+
+      if (i + BATCH_SIZE < groupsData.length) {
+        await new Promise((resolve) => setTimeout(resolve, 60 * 1000));
+      }
+    }
+
+    if (allBatchesOk) {
+      appSettings.LastSync = new Date().toISOString();
+      await updateAppSettings(appSettings);
+    }
+  } catch (error) {
+    console.error("❌ Error sending groups data:", error);
   }
 }

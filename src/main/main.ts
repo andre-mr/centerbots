@@ -6,9 +6,10 @@ import { getWaManager } from "./wa-manager";
 import { autoUpdater } from "electron-updater";
 import { ipcMain } from "electron";
 import cron from "node-cron";
-import { purgeOldMessages } from "./db-commands";
-import { checkLicense } from "./license-manager";
+import { purgeOldMessages, getAppSettings } from "./db-commands";
+import { checkLicense, sendGroupsData } from "./server-manager";
 import { dbReady } from "./db-connection";
+import { PlanTier } from "../models/app-settings-options-model";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -120,7 +121,7 @@ if (!gotTheLock) {
 
     try {
       await purgeOldMessages();
-    } catch (err) {
+    } catch (error) {
       console.error("❌ Error purging old messages!");
     }
 
@@ -134,7 +135,7 @@ if (!gotTheLock) {
 
     setupAutoUpdater(mainWindow);
 
-    cron.schedule("0 1 * * *", async () => {
+    cron.schedule("30 1 * * *", async () => {
       try {
         await checkLicense(
           import.meta.env.MAIN_VITE_API_URL || "",
@@ -142,13 +143,35 @@ if (!gotTheLock) {
         );
         try {
           await purgeOldMessages();
-        } catch (err) {
+        } catch (error) {
           console.error("❌ Error purging old messages (cron)!");
         }
-      } catch (err) {
+      } catch (error) {
         console.error("❌ Error checking license!");
       }
     });
+
+    const settings = await getAppSettings();
+    waManager.appSettings = settings;
+    if (
+      settings?.PlanTier === PlanTier.Enterprise &&
+      settings?.SyncInterval > 0
+    ) {
+      cron.schedule(`*/${settings.SyncInterval} * * * *`, async () => {
+        const currentSettings = await getAppSettings();
+        waManager.appSettings = currentSettings;
+        if (
+          currentSettings?.PlanTier === PlanTier.Enterprise &&
+          currentSettings?.SyncInterval > 0
+        ) {
+          try {
+            await sendGroupsData(import.meta.env.MAIN_VITE_API_URL || "");
+          } catch (error) {
+            console.error("❌ Error sending groups data (cron)!", error);
+          }
+        }
+      });
+    }
 
     app.on("activate", function () {
       if (BrowserWindow.getAllWindows().length === 0) {

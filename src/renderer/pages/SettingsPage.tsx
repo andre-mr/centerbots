@@ -10,6 +10,7 @@ import {
   FiMessageSquare,
   FiTarget,
   FiActivity,
+  FiBriefcase,
 } from "react-icons/fi";
 import { useSettings } from "../contexts/SettingsContext";
 
@@ -22,6 +23,7 @@ const planStatusLabels: Record<PlanStatus, string> = {
 const planTierLabels: Record<PlanTier, string> = {
   [PlanTier.Basic]: "Básico",
   [PlanTier.Full]: "Completo",
+  [PlanTier.Enterprise]: "Corporativo",
 };
 
 const planStatusIcons: Record<PlanStatus, React.JSX.Element> = {
@@ -44,6 +46,9 @@ const planTierIcons: Record<PlanTier, React.JSX.Element> = {
   [PlanTier.Full]: (
     <FiAward className="text-amber-500 dark:text-amber-400" size={20} />
   ),
+  [PlanTier.Enterprise]: (
+    <FiBriefcase className="text-green-600 dark:text-green-300" size={20} />
+  ),
 };
 
 const SettingsPage: React.FC = () => {
@@ -59,8 +64,8 @@ const SettingsPage: React.FC = () => {
         setIsLoadingStats(true);
         const fetchedStats = await window.appApi.getGlobalStats();
         setStats(fetchedStats);
-      } catch (err) {
-        console.error("❌ Error fetching statistics:", err);
+      } catch (error) {
+        console.error("❌ Error fetching statistics:", error);
       } finally {
         setIsLoadingStats(false);
       }
@@ -95,7 +100,7 @@ const SettingsPage: React.FC = () => {
       await window.appApi.updateAppSettings(settings);
       await refreshSettings();
       setError(null);
-    } catch (err) {
+    } catch (error) {
       setError("Erro ao salvar configurações.");
     } finally {
       setIsLoading(false);
@@ -191,11 +196,40 @@ const SettingsPage: React.FC = () => {
                   <div className="mb-2 font-semibold text-gray-700 dark:text-gray-200">
                     Tipo de Plano
                   </div>
-                  <div className="flex items-center gap-3 text-gray-800 dark:text-gray-100">
-                    {planTierIcons[settings.PlanTier]}
-                    <span className="font-medium">
-                      {planTierLabels[settings.PlanTier]}
-                    </span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3 text-gray-800 dark:text-gray-100">
+                      {planTierIcons[settings.PlanTier]}
+                      <span className="font-medium">
+                        {planTierLabels[settings.PlanTier]}
+                      </span>
+                    </div>
+                    {settings.PlanTier === PlanTier.Enterprise && (
+                      <div className="flex items-center gap-3">
+                        <input
+                          id="syncGroups"
+                          name="SyncGroups"
+                          type="checkbox"
+                          className="h-5 w-5 rounded border-gray-300 text-emerald-500 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-800 dark:focus:ring-emerald-400"
+                          checked={settings.SyncInterval > 0}
+                          onChange={(e) => {
+                            setSettings((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    SyncInterval: e.target.checked ? 10 : 0, // minutes
+                                  }
+                                : prev
+                            );
+                          }}
+                        />
+                        <label
+                          htmlFor="syncGroups"
+                          className="font-semibold text-gray-700 dark:text-gray-200"
+                        >
+                          Sincronizar grupos
+                        </label>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

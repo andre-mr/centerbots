@@ -30,7 +30,8 @@ export function setupIpcHandlers() {
     if (
       appSettings &&
       (appSettings.UserId !== settings.UserId ||
-        appSettings.LicenseKey !== settings.LicenseKey)
+        appSettings.LicenseKey !== settings.LicenseKey ||
+        appSettings.SyncInterval != settings.SyncInterval)
     ) {
       await updateAppSettings(settings);
       app.relaunch();

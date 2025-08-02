@@ -19,10 +19,10 @@ export enum SendMethods {
 }
 
 export enum LinkParameters {
-  All = "all",
-  Source = "source",
-  Medium = "medium",
-  None = "none",
+  All = "All",
+  Source = "Source",
+  Medium = "Medium",
+  None = "None",
 }
 
 export interface SendingMessageInfo {

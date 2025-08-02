@@ -7,4 +7,5 @@ export enum PlanStatus {
 export enum PlanTier {
   Basic = "Basic",
   Full = "Full",
+  Enterprise = "Enterprise",
 }

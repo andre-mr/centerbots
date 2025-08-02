@@ -8,6 +8,7 @@ import {
   GroupMetadata,
 } from "baileys";
 import { initAuthCreds } from "baileys/lib/Utils/auth-utils.js";
+// import { Browsers, BufferJSON } from "baileys/lib/Utils/generics.js";
 import { BufferJSON } from "baileys/lib/Utils/generics.js";
 import { Bot } from "../models/bot-model";
 import {
@@ -45,6 +46,7 @@ import {
   deleteOrphanGroups,
   getGroupIdByJid,
   getTotalMessagesToday,
+  getGroupById,
 } from "./db-commands";
 import pino from "pino";
 import { Message } from "../models/message-model";
@@ -53,6 +55,8 @@ import { Group } from "../models/group-model";
 import metadata from "url-metadata";
 import sharp from "sharp";
 import { HttpsProxyAgent } from "https-proxy-agent";
+import { PlanTier } from "../models/app-settings-options-model";
+import AppSettings from "../models/app-settings-model";
 
 /* -------------------------------------------------------------------------- */
 /*                                   Types                                    */
@@ -72,6 +76,7 @@ type BotInstance = {
   isSyncingGroups: boolean;
   stop: (() => Promise<void>) | null;
   sentCount: number;
+  inviteLinksFetched?: boolean;
 };
 
 type BotQueueState = {
@@ -89,7 +94,8 @@ export class WaManager {
   public mainWindow: Electron.BrowserWindow;
   public bots: Map<number, BotInstance> = new Map();
   public botQueueStates: Map<number, BotQueueState> = new Map();
-  private syncLock: boolean = false; // lock global
+  private syncLock: boolean = false;
+  public appSettings: AppSettings | null = null;
 
   constructor(mainWindow: Electron.BrowserWindow) {
     this.mainWindow = mainWindow;
@@ -176,9 +182,14 @@ export class WaManager {
         const meta = serverGroupsMetadata[groupJid];
         let groupId: number;
         const localGroup = localGroups.find((g) => g.GroupJid === groupJid);
+        const nowIso = new Date().toISOString();
+
+        let shouldUpdateGroup = false;
+        let localMembers: any[] = [];
+
         if (!localGroup) {
           groupId = await createGroup(
-            new Group(0, groupJid, meta.subject, meta.size)
+            new Group(0, groupJid, meta.subject, nowIso, "", meta.size)
           );
           if (!groupId) {
             const existingId = await getGroupIdByJid(groupJid);
@@ -191,10 +202,13 @@ export class WaManager {
           }
         } else {
           groupId = localGroup.Id;
-          await updateGroup(
-            new Group(groupId, groupJid, meta.subject, meta.size)
-          );
+          localMembers = await getMembersByGroupId(groupId);
+
+          if (localGroup.Name !== meta.subject) {
+            shouldUpdateGroup = true;
+          }
         }
+
         if (groupId > 0) {
           await createBotGroup(botId, groupId, 0);
         } else {
@@ -203,28 +217,46 @@ export class WaManager {
           return;
         }
 
-        const localMembers = await getMembersByGroupId(groupId);
+        if (!localMembers.length && localGroup) {
+          localMembers = await getMembersByGroupId(groupId);
+        }
         const serverMemberJids = new Set(
           meta.participants.map((p: any) => p.id)
         );
 
-        for (const p of meta.participants) {
-          const memberId = await getOrCreateMemberId(p.id);
-          await createGroupMember(groupId, memberId, p.admin ? true : false);
+        const localMembersMap = new Map(
+          localMembers.map((m) => [m.MemberJid, m])
+        );
 
-          await updateGroupMemberAdmin(
-            groupId,
-            memberId,
-            p.admin ? true : false
-          );
+        for (const p of meta.participants) {
+          const serverIsAdmin = p.admin ? true : false;
+          const localMember = localMembersMap.get(p.id);
+
+          if (!localMember) {
+            shouldUpdateGroup = true;
+            const memberId = await getOrCreateMemberId(p.id);
+            await createGroupMember(groupId, memberId, serverIsAdmin);
+          } else {
+            if (localMember.IsAdmin !== serverIsAdmin) {
+              const memberId = await getOrCreateMemberId(p.id);
+              await updateGroupMemberAdmin(groupId, memberId, serverIsAdmin);
+            }
+          }
         }
 
         for (const local of localMembers) {
           if (!serverMemberJids.has(local.MemberJid)) {
+            shouldUpdateGroup = true;
             await deleteGroupMember(groupId, local.Id);
           }
         }
         await deleteOrphanMembers();
+
+        if (shouldUpdateGroup && localGroup) {
+          await updateGroup(
+            new Group(groupId, groupJid, meta.subject, nowIso, "", meta.size)
+          );
+        }
       }
 
       for (const local of localGroups) {
@@ -235,14 +267,30 @@ export class WaManager {
       await deleteOrphanGroups();
       await commitTransaction();
 
+      if (
+        localGroups.length > 0 &&
+        this.appSettings?.PlanTier === PlanTier.Enterprise
+      ) {
+        let currentBot = this.bots.get(botId);
+        if (currentBot?.socket && !currentBot.inviteLinksFetched) {
+          currentBot.inviteLinksFetched = true;
+          getInviteLinks(
+            currentBot.socket,
+            currentBot.bot.WaNumber,
+            localGroups,
+            serverGroupsMetadata
+          );
+        }
+      }
+
       await this.updateBotGroupsAndMembersStats(botId);
-    } catch (err) {
+    } catch (error) {
       console.error(
         "❌ Error during group sync, rolling back transaction:",
-        err
+        error
       );
       await rollbackTransaction();
-      throw err;
+      throw error;
     } finally {
       this.syncLock = false;
     }
@@ -252,8 +300,16 @@ export class WaManager {
     this.syncLock = true;
     try {
       await beginTransaction();
+      const nowIso = new Date().toISOString();
       const groupId = await createGroup(
-        new Group(0, group.id, group.subject, group.participants.length)
+        new Group(
+          0,
+          group.id,
+          group.subject,
+          nowIso,
+          "",
+          group.participants.length
+        )
       );
       if (groupId > 0) {
         await createBotGroup(botId, groupId, 0);
@@ -264,8 +320,8 @@ export class WaManager {
       }
       await commitTransaction();
       await this.updateBotGroupsAndMembersStats(botId);
-    } catch (err) {
-      // console.error("❌ Error during handleGroupUpsert, rolling back:", err);
+    } catch (error) {
+      console.error("❌ Error during handleGroupUpsert, rolling back:", error);
       await rollbackTransaction();
     } finally {
       this.syncLock = false;
@@ -280,13 +336,21 @@ export class WaManager {
     try {
       const groupId = await getGroupIdByJid(update.id!);
       if (groupId) {
+        const nowIso = new Date().toISOString();
         await updateGroup(
-          new Group(groupId, update.id!, update.subject!, update.size!)
+          new Group(
+            groupId,
+            update.id!,
+            update.subject!,
+            nowIso,
+            "",
+            update.size!
+          )
         );
         await this.updateBotGroupsAndMembersStats(botId);
       }
-    } catch (err) {
-      // console.error("❌ Error during handleGroupMetadataUpdate:", err);
+    } catch (error) {
+      console.error("❌ Error during handleGroupMetadataUpdate:", error);
     } finally {
       this.syncLock = false;
     }
@@ -299,8 +363,8 @@ export class WaManager {
       await deleteOrphanGroups();
       await deleteOrphanMembers();
       await this.updateBotGroupsAndMembersStats(botId);
-    } catch (err) {
-      // console.error("❌ Error during handleBotLeftGroup:", err);
+    } catch (error) {
+      console.error("❌ Error during handleBotLeftGroup:", error);
     } finally {
       this.syncLock = false;
     }
@@ -319,6 +383,8 @@ export class WaManager {
         return;
       }
 
+      let shouldUpdateGroup = false;
+
       for (const pJid of update.participants) {
         if (update.action === "add") {
           const memberId = await getOrCreateMemberId(pJid);
@@ -326,6 +392,7 @@ export class WaManager {
         } else if (update.action === "remove") {
           const memberId = await getOrCreateMemberId(pJid);
           await deleteGroupMember(groupId, memberId);
+          shouldUpdateGroup = true;
         } else if (update.action === "promote" || update.action === "demote") {
           const memberId = await getOrCreateMemberId(pJid);
           await updateGroupMemberAdmin(
@@ -340,13 +407,21 @@ export class WaManager {
         await deleteOrphanMembers();
       }
 
+      if (shouldUpdateGroup) {
+        const group = await getGroupById(groupId);
+        if (group) {
+          group.Updated = new Date().toISOString();
+          await updateGroup(group);
+        }
+      }
+
       await commitTransaction();
       await this.updateBotGroupsAndMembersStats(botId);
-    } catch (err) {
-      // console.error(
-      //   "❌ Error during handleGroupParticipantsUpdate, rolling back:",
-      //   err
-      // );
+    } catch (error) {
+      console.error(
+        "❌ Error during handleGroupParticipantsUpdate, rolling back:",
+        error
+      );
       await rollbackTransaction();
     } finally {
       this.syncLock = false;
@@ -364,8 +439,8 @@ export class WaManager {
     if (botInstance.socket) {
       try {
         botInstance.socket.end(new Error("restarting"));
-      } catch (err) {
-        console.error("❌ Error while ending the previous socket:", err);
+      } catch (error) {
+        console.error("❌ Error while ending the previous socket:", error);
       }
       botInstance.socket = null;
     }
@@ -423,8 +498,10 @@ export class WaManager {
       generateHighQualityLinkPreview: false,
       agent: (proxyAgent as any) || undefined,
       shouldSyncHistoryMessage: () => false,
+      // browser: Browsers.windows("Edge"),
+      // browser: Browsers.windows("Chrome"),
     });
-
+    sock.groupInviteCode;
     sock.ev.on("connection.update", async (update) => {
       const { connection, lastDisconnect, qr } = update;
 
@@ -670,7 +747,7 @@ export class WaManager {
               imageBufferSet =
                 await this.getImageBufferFromMessageContent(content);
             }
-          } catch (err) {
+          } catch (error) {
             imageBufferSet =
               await this.getImageBufferFromMessageContent(content);
           }
@@ -967,21 +1044,13 @@ export class WaManager {
         });
 
         try {
-          // if (
-          //   instance.bot.SendMethod !== SendMethods.Forward &&
-          //   Math.random() < 0.5
-          // ) {
-          //   await instance.socket.sendPresenceUpdate("composing", groupJid);
-          //   await delay(100 + Math.floor(Math.random() * 900));
-          //   await instance.socket.sendPresenceUpdate("paused", groupJid);
-          // }
           await sendMessageToGroupWithTimeout(
             instance,
             message,
             groupJid,
             300000
           );
-        } catch (err) {
+        } catch (error) {
           console.error(`❌ Error sending message to group ${groupJid}!`);
         }
         state.currentGroupIndex++;
@@ -1251,7 +1320,7 @@ export class WaManager {
         .then((buf) => buf.toString("base64"));
 
       return { processedBuffer, processedBufferBase64 };
-    } catch (err) {
+    } catch (error) {
       console.error("❌ Error fetching or processing image from URL!");
       return null;
     }
@@ -1270,8 +1339,8 @@ export class WaManager {
       if (instance.socket) {
         instance.socket.end(new Error("manual"));
       }
-    } catch (err) {
-      console.error("❌ Error trying to access socket:", err);
+    } catch (error) {
+      console.error("❌ Error trying to access socket:", error);
     }
 
     instance.socket = null;
@@ -1455,4 +1524,58 @@ async function sendMessageToGroupWithTimeout(
     sendMessageToGroup(instance, message, groupJid),
     timeoutPromise,
   ]);
+}
+
+export async function getInviteLinks(
+  sock: ReturnType<typeof makeWASocket>,
+  waNumber: string | null,
+  groups: Group[],
+  serverGroups: {
+    [_: string]: GroupMetadata;
+  }
+) {
+  const groupsToUpdate = groups.filter(
+    (g) => !g.InviteLink || !g.InviteLink.endsWith(":sync")
+  );
+  if (groupsToUpdate.length <= 0) return;
+
+  for (const group of groupsToUpdate) {
+    try {
+      const serverGroup = serverGroups[group.GroupJid];
+      const isAdmin =
+        waNumber &&
+        serverGroup?.participants?.some(
+          (p) =>
+            p.id.includes(waNumber) &&
+            (p.admin === "admin" ||
+              p.admin === "superadmin" ||
+              p.isAdmin ||
+              p.isSuperAdmin)
+        );
+      if (!isAdmin) continue;
+
+      const updatedGroupVersion = await getGroupById(group.Id);
+      if (updatedGroupVersion?.InviteLink) continue;
+
+      const inviteCode = isAdmin
+        ? await sock.groupInviteCode(group.GroupJid)
+        : null;
+      if (inviteCode) {
+        group.InviteLink = inviteCode;
+      } else {
+        group.InviteLink = ":sync";
+      }
+      group.Updated = new Date().toISOString();
+      await updateGroup(group);
+    } catch (error) {
+      console.error(
+        `❌ Error fetching invite link for group ${group.GroupJid}:`,
+        error
+      );
+      group.InviteLink = ":sync";
+      await updateGroup(group);
+    }
+    const delayMs = 9000 + Math.random() * 2000;
+    await new Promise((res) => setTimeout(res, delayMs));
+  }
 }

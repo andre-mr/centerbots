@@ -12,6 +12,8 @@ class AppSettings {
   MachineId: string | null = null;
   LastIP: string | null = null;
   LastCheckin: string = new Date().toISOString();
+  LastSync: string = new Date().toISOString();
+  SyncInterval: number = 0;
   Platform: string = ""; // windows, linux, darwin, etc.
 }
 

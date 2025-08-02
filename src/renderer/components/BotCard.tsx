@@ -257,11 +257,13 @@ const BotCard: React.FC<
       </div>
 
       {qrCode && (
-        <div className="flex flex-col items-center gap-2 p-2">
+        <div className="flex flex-col items-center gap-2">
           <span className="text-xs text-gray-500 dark:text-gray-400">
             QR Code para login:
           </span>
-          <QRCodeCanvas value={qrCode} size={320} />
+          <div className="bg-white p-1">
+            <QRCodeCanvas value={qrCode} size={320} />
+          </div>
         </div>
       )}
     </div>
