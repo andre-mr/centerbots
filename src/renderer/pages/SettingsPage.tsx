@@ -216,7 +216,7 @@ const SettingsPage: React.FC = () => {
                               prev
                                 ? {
                                     ...prev,
-                                    SyncInterval: e.target.checked ? 10 : 0, // minutes
+                                    SyncInterval: e.target.checked ? 30 : 0, // minutes
                                   }
                                 : prev
                             );
@@ -226,7 +226,7 @@ const SettingsPage: React.FC = () => {
                           htmlFor="syncGroups"
                           className="font-semibold text-gray-700 dark:text-gray-200"
                         >
-                          Sincronizar grupos
+                          Sincronizar com servidor
                         </label>
                       </div>
                     )}

@@ -182,16 +182,51 @@ export async function checkLicense(
   }
 }
 
-export async function sendGroupsData(groupsApiUrl: string): Promise<void> {
+export async function sendSyncData(
+  apiUrl: string,
+  botsData?: any[],
+  syncGroups: boolean = false
+): Promise<void> {
   try {
-    if (!groupsApiUrl) {
-      console.error("❌ Groups API URL not provided. Skipping sync.");
+    if (!apiUrl) {
+      console.error("❌ API URL not provided. Skipping sync.");
       return;
     }
 
     const appSettings = await getAppSettings();
     if (!appSettings) {
-      console.error("❌ Could not get app settings for group sync!");
+      console.error("❌ Could not get app settings for sync!");
+      return;
+    }
+
+    const userData = {
+      UserId: appSettings.UserId,
+      LicenseKey: appSettings.LicenseKey,
+    };
+
+    if (botsData && botsData.length > 0) {
+      const payload = {
+        userData,
+        botsData,
+      };
+      try {
+        const response = await fetch(apiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (response.ok) {
+        } else {
+          console.error(
+            `❌ Failed to send bots data. Status: ${response.status}`
+          );
+        }
+      } catch (error) {
+        console.error("❌ Error sending bots data:", error);
+      }
+    }
+
+    if (!syncGroups) {
       return;
     }
 
@@ -206,7 +241,7 @@ export async function sendGroupsData(groupsApiUrl: string): Promise<void> {
       includeAll = true;
     }
 
-    let groupsToSync = allGroups.filter((group) => {
+    const groupsToSync = allGroups.filter((group) => {
       if (includeAll) return true;
       if (!group.Updated) return true;
       const updatedDate = new Date(group.Updated);
@@ -217,58 +252,61 @@ export async function sendGroupsData(groupsApiUrl: string): Promise<void> {
       return;
     }
 
-    const groupsData = groupsToSync.map((g) => {
-      return {
-        GroupJid: g.GroupJid,
-        InviteLink: g.InviteLink.endsWith(":sync") ? "" : g.InviteLink,
-        Members: g.TotalMembers,
-        Name: g.Name,
-        Updated: g.Updated,
-      };
-    });
+    const groupsData = groupsToSync.map((g) => ({
+      GroupJid: g.GroupJid,
+      InviteLink: g.InviteLink.endsWith(":sync") ? "" : g.InviteLink,
+      Members: g.TotalMembers,
+      Name: g.Name,
+      Updated: g.Updated,
+    }));
 
     const BATCH_SIZE = 100;
     let allBatchesOk = true;
     for (let i = 0; i < groupsData.length; i += BATCH_SIZE) {
       const batch = groupsData.slice(i, i + BATCH_SIZE);
       const payload = {
-        userData: {
-          UserId: appSettings.UserId,
-          LicenseKey: appSettings.LicenseKey,
-        },
+        userData,
         groupsData: batch,
       };
 
-      const response = await fetch(groupsApiUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      try {
+        const response = await fetch(apiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
 
-      if (response.ok) {
-        const batchJids = new Set(batch.map((b) => b.GroupJid));
-        const originalGroupsInBatch = groupsToSync.filter((g) =>
-          batchJids.has(g.GroupJid)
-        );
+        if (response.ok) {
+          const batchJids = new Set(batch.map((b) => b.GroupJid));
+          const originalGroupsInBatch = groupsToSync.filter((g) =>
+            batchJids.has(g.GroupJid)
+          );
 
-        const groupsToUpdate = originalGroupsInBatch.filter(
-          (g) => g.InviteLink && !g.InviteLink.endsWith(":sync")
-        );
+          const groupsToUpdate = originalGroupsInBatch.filter(
+            (g) => g.InviteLink && !g.InviteLink.endsWith(":sync")
+          );
 
-        if (groupsToUpdate.length > 0) {
-          try {
-            const groupIdsToUpdate = groupsToUpdate.map((g) => g.Id);
-            await markInviteLinksAsSynced(groupIdsToUpdate);
-          } catch (dbErr) {
-            console.error("❌ Error bulk updating groups after sync:", dbErr);
+          if (groupsToUpdate.length > 0) {
+            try {
+              const groupIdsToUpdate = groupsToUpdate.map((g) => g.Id);
+              await markInviteLinksAsSynced(groupIdsToUpdate);
+            } catch (dbErr) {
+              console.error("❌ Error bulk updating groups after sync:", dbErr);
+            }
           }
+        } else {
+          allBatchesOk = false;
+          console.error(
+            `❌ Failed to send groups data. Status: ${response.status} (batch ${
+              Math.floor(i / BATCH_SIZE) + 1
+            })`
+          );
         }
-      } else {
+      } catch (batchError) {
         allBatchesOk = false;
         console.error(
-          `❌ Failed to send groups data. Status: ${response.status} (batch ${
-            Math.floor(i / BATCH_SIZE) + 1
-          })`
+          `❌ Error sending groups batch ${Math.floor(i / BATCH_SIZE) + 1}:`,
+          batchError
         );
       }
 
@@ -280,8 +318,10 @@ export async function sendGroupsData(groupsApiUrl: string): Promise<void> {
     if (allBatchesOk) {
       appSettings.LastSync = new Date().toISOString();
       await updateAppSettings(appSettings);
+    } else {
+      console.error("❌ Groups sync finished with errors.");
     }
   } catch (error) {
-    console.error("❌ Error sending groups data:", error);
+    console.error("❌ Error during sync process:", error);
   }
 }

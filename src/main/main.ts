@@ -7,9 +7,10 @@ import { autoUpdater } from "electron-updater";
 import { ipcMain } from "electron";
 import cron from "node-cron";
 import { purgeOldMessages, getAppSettings } from "./db-commands";
-import { checkLicense, sendGroupsData } from "./server-manager";
+import { checkLicense, sendSyncData } from "./server-manager";
 import { dbReady } from "./db-connection";
 import { PlanTier } from "../models/app-settings-options-model";
+import { Status } from "../models/bot-options-model";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -113,7 +114,7 @@ if (!gotTheLock) {
   app.whenReady().then(async () => {
     electronApp.setAppUserModelId("com.electron");
 
-    setupIpcHandlers(); // ADICIONE AQUI
+    setupIpcHandlers();
 
     mainWindow = createWindow();
 
@@ -135,40 +136,94 @@ if (!gotTheLock) {
 
     setupAutoUpdater(mainWindow);
 
-    cron.schedule("30 1 * * *", async () => {
-      try {
-        await checkLicense(
-          import.meta.env.MAIN_VITE_API_URL || "",
-          mainWindow!
-        );
-        try {
-          await purgeOldMessages();
-        } catch (error) {
-          console.error("❌ Error purging old messages (cron)!");
-        }
-      } catch (error) {
-        console.error("❌ Error checking license!");
-      }
-    });
-
     const settings = await getAppSettings();
     waManager.appSettings = settings;
     if (
       settings?.PlanTier === PlanTier.Enterprise &&
       settings?.SyncInterval > 0
     ) {
-      cron.schedule(`*/${settings.SyncInterval} * * * *`, async () => {
+      cron.schedule("* * * * *", async () => {
+        const now = new Date();
+        const minute = now.getMinutes();
+        const hour = now.getHours();
+
+        if (hour === 0 && minute === 15) {
+          try {
+            await checkLicense(
+              import.meta.env.MAIN_VITE_API_URL || "",
+              mainWindow!
+            );
+            try {
+              await purgeOldMessages();
+            } catch (error) {
+              console.error("❌ Error purging old messages (cron)!");
+            }
+          } catch (error) {
+            console.error("❌ Error checking license!");
+          }
+        }
+
         const currentSettings = await getAppSettings();
         waManager.appSettings = currentSettings;
         if (
           currentSettings?.PlanTier === PlanTier.Enterprise &&
           currentSettings?.SyncInterval > 0
         ) {
+          const bots = waManager.getBots();
+          const botsWithBroadcastGroups = bots.map((bot) => {
+            const instance = waManager.bots.get(bot.Id);
+            if (
+              waManager.appSettings?.LastSync &&
+              bot.Updated > waManager.appSettings.LastSync
+            ) {
+              const broadcastGroups = instance?.broadcastGroupJids?.size ?? 0;
+              return bot.Status === Status.Offline
+                ? bot
+                : bot.Status === Status.Sending
+                  ? {
+                      ...bot,
+                      BroadcastGroups: broadcastGroups,
+                      QueueSize: instance?.messageQueue?.length ?? 0,
+                    }
+                  : {
+                      ...bot,
+                      BroadcastGroups: broadcastGroups,
+                    };
+            } else {
+              return {
+                WaNumber: bot.WaNumber,
+                Status: bot.Status,
+              };
+            }
+          });
+
+          const interval = Math.min(currentSettings.SyncInterval, 60);
+          const syncGroups = minute % interval === 0;
           try {
-            await sendGroupsData(import.meta.env.MAIN_VITE_API_URL || "");
+            await sendSyncData(
+              import.meta.env.MAIN_VITE_API_URL || "",
+              botsWithBroadcastGroups,
+              syncGroups
+            );
           } catch (error) {
-            console.error("❌ Error sending groups data (cron)!", error);
+            console.error("❌ Error sending sync data (cron)!", error);
           }
+        }
+      });
+    } else {
+      cron.schedule("15 0 * * *", async () => {
+        try {
+          await checkLicense(
+            import.meta.env.MAIN_VITE_API_URL || "",
+            mainWindow!
+          );
+          try {
+            await purgeOldMessages();
+          } catch (error) {
+            console.error("❌ Error purging old messages (cron)!");
+          }
+        } catch (error) {
+          console.error("❌ Error checking license!");
         }
       });
     }

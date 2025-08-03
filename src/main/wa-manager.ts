@@ -733,11 +733,16 @@ export class WaManager {
               const mediaBuffer = await downloadMediaMessage(msg, "buffer", {});
               if (mediaBuffer) {
                 const processedBuffer = await sharp(mediaBuffer)
-                  .resize({ width: 300, fit: "inside" })
+                  .resize({ width: 600, height: 600, fit: "cover" })
+                  .jpeg({ quality: 50 })
+                  .toBuffer();
+                const thumbnailBuffer = await sharp(mediaBuffer)
+                  .resize({ width: 300, height: 300, fit: "cover" })
+                  .jpeg({ quality: 50 })
                   .toBuffer();
                 imageBufferSet = {
                   processedBuffer,
-                  processedBufferBase64: processedBuffer.toString("base64"),
+                  processedBufferBase64: thumbnailBuffer.toString("base64"),
                 };
               } else {
                 imageBufferSet =
@@ -1309,15 +1314,16 @@ export class WaManager {
       const buffer = Buffer.from(arrayBuffer);
 
       const processedBuffer = await sharp(buffer)
-        .resize({ width: 600 })
+        .resize({ width: 600, height: 600, fit: "cover" })
         .jpeg({ quality: 50 })
         .toBuffer();
 
-      const processedBufferBase64 = await sharp(buffer)
-        .resize({ width: 300 })
+      const processedThumbnailBuffer = await sharp(buffer)
+        .resize({ width: 300, height: 300, fit: "cover" })
         .jpeg({ quality: 50 })
-        .toBuffer()
-        .then((buf) => buf.toString("base64"));
+        .toBuffer();
+
+      const processedBufferBase64 = processedThumbnailBuffer.toString("base64");
 
       return { processedBuffer, processedBufferBase64 };
     } catch (error) {

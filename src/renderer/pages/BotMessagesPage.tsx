@@ -120,7 +120,7 @@ const BotMessagesPage: React.FC<BotMessagesPageProps> = ({ bot, onBack }) => {
                     onUp={() => handleMoveUp(idx)}
                     onDown={() => handleMoveDown(idx)}
                     onDelete={() => handleDelete(idx)}
-                    onMoveToTop={() => handleMoveToTop(idx)} // <-- add this prop
+                    onMoveToTop={() => handleMoveToTop(idx)}
                   />
                 ))}
               </div>
