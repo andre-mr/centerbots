@@ -733,11 +733,11 @@ export class WaManager {
               const mediaBuffer = await downloadMediaMessage(msg, "buffer", {});
               if (mediaBuffer) {
                 const processedBuffer = await sharp(mediaBuffer)
-                  .resize({ width: 600, height: 600, fit: "cover" })
+                  .resize({ width: 600, fit: "inside" })
                   .jpeg({ quality: 50 })
                   .toBuffer();
                 const thumbnailBuffer = await sharp(mediaBuffer)
-                  .resize({ width: 300, height: 300, fit: "cover" })
+                  .resize({ width: 300, height: 300, fit: "inside" })
                   .jpeg({ quality: 50 })
                   .toBuffer();
                 imageBufferSet = {
