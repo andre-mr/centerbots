@@ -57,6 +57,7 @@ import sharp from "sharp";
 import { HttpsProxyAgent } from "https-proxy-agent";
 import { PlanTier } from "../models/app-settings-options-model";
 import AppSettings from "../models/app-settings-model";
+import { logger } from "./logger";
 
 /* -------------------------------------------------------------------------- */
 /*                                   Types                                    */
@@ -77,6 +78,8 @@ type BotInstance = {
   stop: (() => Promise<void>) | null;
   sentCount: number;
   inviteLinksFetched?: boolean;
+  reconnectTimer?: NodeJS.Timeout;
+  lastDisconnectAt?: number | null;
 };
 
 type BotQueueState = {
@@ -121,6 +124,8 @@ export class WaManager {
         broadcastGroupJids: null,
         reconnectAttempts: 0,
         sentCount: 0,
+        reconnectTimer: undefined,
+        lastDisconnectAt: null,
       });
     } else {
       const instance = this.bots.get(bot.Id)!;
@@ -272,7 +277,13 @@ export class WaManager {
         this.appSettings?.PlanTier === PlanTier.Enterprise
       ) {
         let currentBot = this.bots.get(botId);
-        if (currentBot?.socket && !currentBot.inviteLinksFetched) {
+        if (
+          currentBot?.socket &&
+          !currentBot.inviteLinksFetched &&
+          currentBot.bot.WaNumber &&
+          localGroups?.length > 0 &&
+          Object.keys(serverGroupsMetadata).length > 0
+        ) {
           currentBot.inviteLinksFetched = true;
           getInviteLinks(
             currentBot.socket,
@@ -286,6 +297,10 @@ export class WaManager {
       await this.updateBotGroupsAndMembersStats(botId);
     } catch (error) {
       console.error(
+        "❌ Error during group sync, rolling back transaction:",
+        error
+      );
+      logger.error(
         "❌ Error during group sync, rolling back transaction:",
         error
       );
@@ -351,6 +366,7 @@ export class WaManager {
       }
     } catch (error) {
       console.error("❌ Error during handleGroupMetadataUpdate:", error);
+      logger.error("❌ Error during handleGroupMetadataUpdate:", error);
     } finally {
       this.syncLock = false;
     }
@@ -365,6 +381,7 @@ export class WaManager {
       await this.updateBotGroupsAndMembersStats(botId);
     } catch (error) {
       console.error("❌ Error during handleBotLeftGroup:", error);
+      logger.error("❌ Error during handleBotLeftGroup:", error);
     } finally {
       this.syncLock = false;
     }
@@ -422,6 +439,10 @@ export class WaManager {
         "❌ Error during handleGroupParticipantsUpdate, rolling back:",
         error
       );
+      logger.error(
+        "❌ Error during handleGroupParticipantsUpdate, rolling back:",
+        error
+      );
       await rollbackTransaction();
     } finally {
       this.syncLock = false;
@@ -441,6 +462,7 @@ export class WaManager {
         botInstance.socket.end(new Error("restarting"));
       } catch (error) {
         console.error("❌ Error while ending the previous socket:", error);
+        logger.error("❌ Error while ending the previous socket:", error);
       }
       botInstance.socket = null;
     }
@@ -575,6 +597,19 @@ export class WaManager {
       if (connection === "close") {
         const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+        const RISKY_MAX_RECONNECT_ATTEMPTS = 5;
+
+        if (!bot.Active) {
+          bot.Status = Status.Offline;
+          this.mainWindow.webContents.send("bot:statusUpdate", bot);
+          instance.isConnecting = false;
+          instance.socket = null;
+          if (instance.reconnectTimer) {
+            clearTimeout(instance.reconnectTimer);
+            instance.reconnectTimer = undefined;
+          }
+          return;
+        }
 
         if (statusCode === DisconnectReason.loggedOut) {
           await clearAuthState(bot.Id);
@@ -588,12 +623,64 @@ export class WaManager {
         instance.socket = null;
 
         if (!instance.manualDisconnect && bot.Active && shouldReconnect) {
+          // increment attempts
           instance.reconnectAttempts += 1;
-          const backoff =
-            instance.reconnectAttempts > 5
-              ? 60_000
-              : Math.min(instance.reconnectAttempts, 5) * 5_000;
-          setTimeout(() => this.startBot(bot), backoff);
+
+          // detect second disconnect within 1 minute window (uses previous value)
+          const now = Date.now();
+          const withinOneMinute =
+            typeof instance.lastDisconnectAt === "number" &&
+            now - instance.lastDisconnectAt < 60_000;
+          instance.lastDisconnectAt = now;
+
+          // reasons considered more "risky"
+          const riskyReasonCodes: number[] = [
+            DisconnectReason.badSession ?? 500,
+            DisconnectReason.connectionReplaced ?? 440,
+            DisconnectReason.multideviceMismatch ?? 411,
+            DisconnectReason.forbidden ?? 403,
+          ];
+
+          const isRisky = riskyReasonCodes.includes(statusCode);
+
+          // Apply max attempts only for risky reasons; others retry indefinitely
+          if (
+            isRisky &&
+            instance.reconnectAttempts >= RISKY_MAX_RECONNECT_ATTEMPTS
+          ) {
+            if (instance.reconnectTimer) {
+              clearTimeout(instance.reconnectTimer);
+              instance.reconnectTimer = undefined;
+            }
+            console.error(
+              "Max reconnect attempts reached for reason:",
+              statusCode
+            );
+            logger.error(
+              "Max reconnect attempts reached for reason:",
+              statusCode
+            );
+            // stop retrying for risky reason after configured max
+            return;
+          }
+
+          // backoff: 60s when: recent disconnect, risky & tried >1, or any case after 5 attempts
+          const useMinuteBackoff =
+            withinOneMinute ||
+            (isRisky && instance.reconnectAttempts > 1) ||
+            instance.reconnectAttempts > 5;
+
+          const backoff = useMinuteBackoff
+            ? 60_000
+            : Math.max(1, instance.reconnectAttempts) * 5_000;
+
+          if (instance.reconnectTimer) {
+            clearTimeout(instance.reconnectTimer);
+          }
+          instance.reconnectTimer = setTimeout(() => {
+            if (!bot.Active) return;
+            this.startBot(bot);
+          }, backoff);
         }
       }
     });
@@ -1056,7 +1143,11 @@ export class WaManager {
             300000
           );
         } catch (error) {
-          console.error(`❌ Error sending message to group ${groupJid}!`);
+          console.error(
+            `❌ Error sending message to group ${groupJid}!`,
+            error
+          );
+          logger.error(`❌ Error sending message to group ${groupJid}!`, error);
         }
         state.currentGroupIndex++;
 
@@ -1120,9 +1211,14 @@ export class WaManager {
             : `${authNumber.WaNumber}@s.whatsapp.net`;
           try {
             await instance.socket.sendMessage(jid, { text: reportMsg });
-          } catch (e) {
+          } catch (error) {
             console.error(
-              `❌ Error sending report message to ${authNumber.WaNumber}`
+              `❌ Error sending report message to ${authNumber.WaNumber}`,
+              error
+            );
+            logger.error(
+              `❌ Error sending report message to ${authNumber.WaNumber}`,
+              error
             );
           }
         }
@@ -1157,6 +1253,7 @@ export class WaManager {
     const instance = this.bots.get(botId);
     if (!instance) {
       console.error(`❌ Bot instance for ID ${botId} not found.`);
+      logger.error(`❌ Bot instance for ID ${botId} not found.`);
       return null;
     }
 
@@ -1193,6 +1290,10 @@ export class WaManager {
       await this.startBot(instance.bot);
       this.mainWindow.webContents.send("bot:statusUpdate", instance.bot);
     } else if (patch.Active === false) {
+      if (instance.reconnectTimer) {
+        clearTimeout(instance.reconnectTimer);
+        instance.reconnectTimer = undefined;
+      }
       instance.bot.Status = Status.Offline;
       this.mainWindow.webContents.send("bot:statusUpdate", instance.bot);
 
@@ -1327,7 +1428,8 @@ export class WaManager {
 
       return { processedBuffer, processedBufferBase64 };
     } catch (error) {
-      console.error("❌ Error fetching or processing image from URL!");
+      console.error("❌ Error fetching or processing image from URL!", error);
+      logger.error("❌ Error fetching or processing image from URL!", error);
       return null;
     }
   }
@@ -1339,7 +1441,10 @@ export class WaManager {
       return;
     }
 
-    this.pauseQueue(botId);
+    if (instance.reconnectTimer) {
+      clearTimeout(instance.reconnectTimer);
+      instance.reconnectTimer = undefined;
+    }
 
     try {
       if (instance.socket) {
@@ -1347,6 +1452,7 @@ export class WaManager {
       }
     } catch (error) {
       console.error("❌ Error trying to access socket:", error);
+      logger.error("❌ Error trying to access socket:", error);
     }
 
     instance.socket = null;
@@ -1575,6 +1681,10 @@ export async function getInviteLinks(
       await updateGroup(group);
     } catch (error) {
       console.error(
+        `❌ Error fetching invite link for group ${group.GroupJid}:`,
+        error
+      );
+      logger.error(
         `❌ Error fetching invite link for group ${group.GroupJid}:`,
         error
       );

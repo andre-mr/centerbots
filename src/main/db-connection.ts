@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { app } from "electron";
 import sqlite3 from "sqlite3";
+import { logger } from "./logger";
 
 const dbPath = path.join(app.getPath("userData"), "centerbots.db");
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
@@ -24,7 +25,9 @@ function get<T>(
   params: any[] = []
 ): Promise<T> {
   return new Promise((resolve, reject) => {
-    db.get(sql, params, (error, row: T) => (error ? reject(error) : resolve(row)));
+    db.get(sql, params, (error, row: T) =>
+      error ? reject(error) : resolve(row)
+    );
   });
 }
 
@@ -259,7 +262,8 @@ CREATE INDEX IF NOT EXISTS idx_message_bots_bot_id ON bot_messages(bot_id);
 
 const database = new sqlite3.Database(dbPath, (error) => {
   if (error) {
-    console.error("❌ Error connecting to the database!");
+    console.error("❌ Error connecting to the database!", error);
+    logger.error("❌ Error connecting to the database!", error);
     throw error;
   }
 });
@@ -267,13 +271,15 @@ const database = new sqlite3.Database(dbPath, (error) => {
 export const dbReady: Promise<void> = new Promise((resolve, reject) => {
   database.run("PRAGMA foreign_keys = ON", (error) => {
     if (error) {
-      console.error("❌ Error enabling foreign keys!");
+      console.error("❌ Error enabling foreign keys!", error);
+      logger.error("❌ Error enabling foreign keys!", error);
       reject(error);
       return;
     }
     database.exec(schema, (error) => {
       if (error) {
-        console.error("❌ Error configuring the database schema!");
+        console.error("❌ Error configuring the database schema!", error);
+        logger.error("❌ Error configuring the database schema!", error);
         reject(error);
         return;
       } else {
@@ -285,7 +291,8 @@ export const dbReady: Promise<void> = new Promise((resolve, reject) => {
           `;
             database.run(initSql, (initErr) => {
               if (initErr) {
-                console.error("❌ Error initializing app_config!");
+                console.error("❌ Error initializing app_config!", initErr);
+                logger.error("❌ Error initializing app_config!", initErr);
                 reject(initErr);
               } else {
                 resolve();

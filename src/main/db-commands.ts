@@ -15,6 +15,7 @@ import { PlanStatus, PlanTier } from "../models/app-settings-options-model";
 import { BotGroup } from "../models/bot-group";
 import { AuthorizedNumber } from "../models/authorized-number-model";
 import { GlobalStats } from "../models/global-stats";
+import { logger } from "./logger";
 
 function all<T>(sql: string, params: any[] = []): Promise<T[]> {
   return new Promise((resolve, reject) => {
@@ -1039,6 +1040,7 @@ export async function purgeOldMessages(): Promise<number> {
       await run(`VACUUM`);
     } catch (error) {
       console.error("❌ Error running VACUUM:", error);
+      logger.error("❌ Error running VACUUM:", error);
     }
   }
 

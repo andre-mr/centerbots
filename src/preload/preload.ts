@@ -101,7 +101,8 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld("appApi", exposedApi);
   } catch (error) {
     console.error(
-      "❌ An error occurred while exposing APIs in the isolated context."
+      "❌ An error occurred while exposing APIs in the isolated context.",
+      error
     );
   }
 } else {

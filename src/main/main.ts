@@ -1,16 +1,21 @@
-import { app, shell, BrowserWindow } from "electron";
+import "./logging-setup";
+import { app, shell, BrowserWindow, ipcMain } from "electron";
 import { join } from "path";
 import { electronApp, is } from "@electron-toolkit/utils";
+
+import cron from "node-cron";
+import { autoUpdater } from "electron-updater";
+
 import { setupIpcHandlers } from "./ipc-handlers";
 import { getWaManager } from "./wa-manager";
-import { autoUpdater } from "electron-updater";
-import { ipcMain } from "electron";
-import cron from "node-cron";
 import { purgeOldMessages, getAppSettings } from "./db-commands";
-import { checkLicense, sendSyncData } from "./server-manager";
 import { dbReady } from "./db-connection";
+import { checkLicense, sendSyncData } from "./server-manager";
+
 import { PlanTier } from "../models/app-settings-options-model";
 import { Status } from "../models/bot-options-model";
+
+import { logger } from "./logger";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -123,7 +128,8 @@ if (!gotTheLock) {
     try {
       await purgeOldMessages();
     } catch (error) {
-      console.error("❌ Error purging old messages!");
+      console.error("❌ Error purging old messages!", error);
+      logger.error("❌ Error purging old messages!", error);
     }
 
     checkLicense(import.meta.env.MAIN_VITE_API_URL || "", mainWindow!);
@@ -156,10 +162,12 @@ if (!gotTheLock) {
             try {
               await purgeOldMessages();
             } catch (error) {
-              console.error("❌ Error purging old messages (cron)!");
+              console.error("❌ Error purging old messages (cron)!", error);
+              logger.error("❌ Error purging old messages (cron)!", error);
             }
           } catch (error) {
-            console.error("❌ Error checking license!");
+            console.error("❌ Error checking license!", error);
+            logger.error("❌ Error checking license!", error);
           }
         }
 
@@ -207,6 +215,7 @@ if (!gotTheLock) {
             );
           } catch (error) {
             console.error("❌ Error sending sync data (cron)!", error);
+            logger.error("❌ Error sending sync data (cron)!", error);
           }
         }
       });
@@ -220,10 +229,12 @@ if (!gotTheLock) {
           try {
             await purgeOldMessages();
           } catch (error) {
-            console.error("❌ Error purging old messages (cron)!");
+            console.error("❌ Error purging old messages (cron)!", error);
+            logger.error("❌ Error purging old messages (cron)!", error);
           }
         } catch (error) {
-          console.error("❌ Error checking license!");
+          console.error("❌ Error checking license!", error);
+          logger.error("❌ Error checking license!", error);
         }
       });
     }

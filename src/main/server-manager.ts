@@ -11,6 +11,7 @@ import os from "os";
 import crypto from "crypto";
 import { PlanStatus, PlanTier } from "../models/app-settings-options-model";
 import packageJson from "../../package.json";
+import { logger } from "./logger";
 
 function generateMachineId(): string {
   let parts: string[] = [];
@@ -36,6 +37,7 @@ export async function checkLicense(
   try {
     if (!apiUrl) {
       console.error("❌ API URL not provided. Invalid license.");
+      logger.error("❌ API URL not provided. Invalid license.");
       mainWindow.webContents.send("license:invalid");
       return;
     }
@@ -43,6 +45,7 @@ export async function checkLicense(
     let appSettings: AppSettings | null = await getAppSettings();
     if (!appSettings) {
       console.error("❌ Could not get app settings!");
+      logger.error("❌ Could not get app settings!");
       return;
     }
 
@@ -123,6 +126,9 @@ export async function checkLicense(
       console.error(
         "❌ API response did not return required fields. Forcing invalid status in database."
       );
+      logger.error(
+        "❌ API response did not return required fields. Forcing invalid status in database."
+      );
       mainWindow.webContents.send("license:invalid");
       return;
     }
@@ -133,12 +139,14 @@ export async function checkLicense(
     }
     if (planStatus === "Invalid") {
       console.error("❌ Invalid license!");
+      logger.error("❌ Invalid license!");
       mainWindow.webContents.send("license:invalid");
       return;
     }
     mainWindow.webContents.send("license:valid");
   } catch (error) {
     console.error("❌ Error checking license:", error);
+    logger.error("❌ Error checking license:", error);
     try {
       let settings: AppSettings | null = await getAppSettings();
       if (settings) {
@@ -154,6 +162,9 @@ export async function checkLicense(
           console.error(
             "❌ Error checking license. Last validation more than 30 days. Forcing INVALID status."
           );
+          logger.error(
+            "❌ Error checking license. Last validation more than 30 days. Forcing INVALID status."
+          );
           mainWindow.webContents.send("license:invalid");
         } else if (diffDays > 7) {
           settings.PlanStatus = PlanStatus.GracePeriod;
@@ -161,9 +172,15 @@ export async function checkLicense(
           console.error(
             "❌ Error checking license. Last validation more than 7 days. Forcing GRACE status."
           );
+          logger.error(
+            "❌ Error checking license. Last validation more than 7 days. Forcing GRACE status."
+          );
           mainWindow.webContents.send("license:grace");
         } else {
           console.error(
+            "❌ Error checking license. Last validation less than 7 days. Keeping current status."
+          );
+          logger.error(
             "❌ Error checking license. Last validation less than 7 days. Keeping current status."
           );
           if (settings.PlanStatus === PlanStatus.GracePeriod) {
@@ -175,8 +192,9 @@ export async function checkLicense(
           }
         }
       }
-    } catch (e) {
-      console.error("❌ Error forcing status after license error!");
+    } catch (error) {
+      console.error("❌ Error forcing status after license error!", error);
+      logger.error("❌ Error forcing status after license error!", error);
       mainWindow.webContents.send("license:invalid");
     }
   }
@@ -190,12 +208,14 @@ export async function sendSyncData(
   try {
     if (!apiUrl) {
       console.error("❌ API URL not provided. Skipping sync.");
+      logger.error("❌ API URL not provided. Skipping sync.");
       return;
     }
 
     const appSettings = await getAppSettings();
     if (!appSettings) {
       console.error("❌ Could not get app settings for sync!");
+      logger.error("❌ Could not get app settings for sync!");
       return;
     }
 
@@ -220,9 +240,13 @@ export async function sendSyncData(
           console.error(
             `❌ Failed to send bots data. Status: ${response.status}`
           );
+          logger.error(
+            `❌ Failed to send bots data. Status: ${response.status}`
+          );
         }
       } catch (error) {
         console.error("❌ Error sending bots data:", error);
+        logger.error("❌ Error sending bots data:", error);
       }
     }
 
@@ -292,6 +316,7 @@ export async function sendSyncData(
               await markInviteLinksAsSynced(groupIdsToUpdate);
             } catch (dbErr) {
               console.error("❌ Error bulk updating groups after sync:", dbErr);
+              logger.error("❌ Error bulk updating groups after sync:", dbErr);
             }
           }
         } else {
@@ -301,10 +326,19 @@ export async function sendSyncData(
               Math.floor(i / BATCH_SIZE) + 1
             })`
           );
+          logger.error(
+            `❌ Failed to send groups data. Status: ${response.status} (batch ${
+              Math.floor(i / BATCH_SIZE) + 1
+            })`
+          );
         }
       } catch (batchError) {
         allBatchesOk = false;
         console.error(
+          `❌ Error sending groups batch ${Math.floor(i / BATCH_SIZE) + 1}:`,
+          batchError
+        );
+        logger.error(
           `❌ Error sending groups batch ${Math.floor(i / BATCH_SIZE) + 1}:`,
           batchError
         );
@@ -320,8 +354,10 @@ export async function sendSyncData(
       await updateAppSettings(appSettings);
     } else {
       console.error("❌ Groups sync finished with errors.");
+      logger.error("❌ Groups sync finished with errors.");
     }
   } catch (error) {
     console.error("❌ Error during sync process:", error);
+    logger.error("❌ Error during sync process:", error);
   }
 }

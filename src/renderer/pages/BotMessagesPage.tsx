@@ -137,22 +137,18 @@ const BotMessagesPage: React.FC<BotMessagesPageProps> = ({ bot, onBack }) => {
             </h2>
           </div>
           <div className="min-h-0 flex-1">
-            <div className="flex h-full flex-col gap-2 overflow-auto rounded border bg-white p-2 shadow dark:bg-gray-800">
-              {loadingHistory && (
-                <span className="ml-2 text-sm text-gray-400">
-                  Carregando...
+            {loadingHistory ? (
+              <span className="ml-2 text-sm text-gray-400">Carregando...</span>
+            ) : history.length === 0 ? (
+              <div className="flex h-full flex-1 flex-col items-center justify-center p-2 shadow">
+                <span className="mb-2 text-2xl">
+                  <FiFileText className="h-8 w-8 text-gray-500" />
                 </span>
-              )}
-              {!loadingHistory && history.length === 0 && (
-                <div className="flex h-full flex-1 flex-col items-center justify-center p-2 shadow">
-                  <span className="mb-2 text-2xl">
-                    <FiFileText className="h-8 w-8 text-gray-500" />
-                  </span>
-                  <span className="text-gray-600 dark:text-gray-300">
-                    Nenhuma mensagem encontrada no histórico.
-                  </span>
-                </div>
-              )}
+                <span className="text-gray-600 dark:text-gray-300">
+                  Nenhuma mensagem encontrada no histórico.
+                </span>
+              </div>
+            ) : (
               <div className="flex flex-col gap-2">
                 {history.map((msg, idx) => (
                   <BotMessage
@@ -162,7 +158,7 @@ const BotMessagesPage: React.FC<BotMessagesPageProps> = ({ bot, onBack }) => {
                   />
                 ))}
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
