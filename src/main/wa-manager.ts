@@ -99,6 +99,10 @@ export class WaManager {
   public botQueueStates: Map<number, BotQueueState> = new Map();
   private syncLock: boolean = false;
   public appSettings: AppSettings | null = null;
+  private pendingParticipantUpdates: {
+    botId: number;
+    update: { id: string; action: string; participants: string[] };
+  }[] = [];
 
   constructor(mainWindow: Electron.BrowserWindow) {
     this.mainWindow = mainWindow;
@@ -308,10 +312,18 @@ export class WaManager {
       throw error;
     } finally {
       this.syncLock = false;
+      this.processPendingParticipantUpdates();
     }
   }
 
   async handleGroupUpsert(botId: number, group: GroupMetadata) {
+    if (this.syncLock) {
+      setTimeout(
+        () => this.handleGroupUpsert(botId, group),
+        400 + Math.random() * 800
+      );
+      return;
+    }
     this.syncLock = true;
     try {
       await beginTransaction();
@@ -340,6 +352,7 @@ export class WaManager {
       await rollbackTransaction();
     } finally {
       this.syncLock = false;
+      this.processPendingParticipantUpdates();
     }
   }
 
@@ -347,6 +360,13 @@ export class WaManager {
     botId: number,
     update: Partial<GroupMetadata>
   ) {
+    if (this.syncLock) {
+      setTimeout(
+        () => this.handleGroupMetadataUpdate(botId, update),
+        300 + Math.random() * 600
+      );
+      return;
+    }
     this.syncLock = true;
     try {
       const groupId = await getGroupIdByJid(update.id!);
@@ -369,10 +389,18 @@ export class WaManager {
       logger.error("❌ Error during handleGroupMetadataUpdate:", error);
     } finally {
       this.syncLock = false;
+      this.processPendingParticipantUpdates();
     }
   }
 
   async handleBotLeftGroup(botId: number, groupId: number) {
+    if (this.syncLock) {
+      setTimeout(
+        () => this.handleBotLeftGroup(botId, groupId),
+        300 + Math.random() * 600
+      );
+      return;
+    }
     this.syncLock = true;
     try {
       await deleteBotGroup(botId, groupId);
@@ -384,6 +412,7 @@ export class WaManager {
       logger.error("❌ Error during handleBotLeftGroup:", error);
     } finally {
       this.syncLock = false;
+      this.processPendingParticipantUpdates();
     }
   }
 
@@ -391,6 +420,10 @@ export class WaManager {
     botId: number,
     update: { id: string; action: string; participants: string[] }
   ) {
+    if (this.syncLock) {
+      this.pendingParticipantUpdates.push({ botId, update });
+      return;
+    }
     this.syncLock = true;
     try {
       await beginTransaction();
@@ -406,6 +439,7 @@ export class WaManager {
         if (update.action === "add") {
           const memberId = await getOrCreateMemberId(pJid);
           await createGroupMember(groupId, memberId, false);
+          shouldUpdateGroup = true;
         } else if (update.action === "remove") {
           const memberId = await getOrCreateMemberId(pJid);
           await deleteGroupMember(groupId, memberId);
@@ -446,7 +480,18 @@ export class WaManager {
       await rollbackTransaction();
     } finally {
       this.syncLock = false;
+      this.processPendingParticipantUpdates();
     }
+  }
+
+  private processPendingParticipantUpdates() {
+    if (this.syncLock) return;
+    const next = this.pendingParticipantUpdates.shift();
+    if (!next) return;
+    setTimeout(
+      () => this.handleGroupParticipantsUpdate(next.botId, next.update),
+      0
+    );
   }
 
   /* -------------------------------------------------------------------------- */
@@ -1652,6 +1697,9 @@ export async function getInviteLinks(
   if (groupsToUpdate.length <= 0) return;
 
   for (const group of groupsToUpdate) {
+    if (!sock?.ws || !sock.ws.isOpen) {
+      break;
+    }
     try {
       const serverGroup = serverGroups[group.GroupJid];
       const isAdmin =
@@ -1679,7 +1727,17 @@ export async function getInviteLinks(
       }
       group.Updated = new Date().toISOString();
       await updateGroup(group);
-    } catch (error) {
+    } catch (error: any) {
+      const msg = error?.message || "";
+      if (/Connection Closed/i.test(msg)) {
+        console.warn(
+          `⚠️ Socket disconnected while fetching invite for group ${group.GroupJid}, aborting the rest.`
+        );
+        logger.warn(
+          `⚠️ Socket disconnected while fetching invite for group ${group.GroupJid}, aborting the rest.`
+        );
+        break;
+      }
       console.error(
         `❌ Error fetching invite link for group ${group.GroupJid}:`,
         error
