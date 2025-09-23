@@ -146,13 +146,23 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
           let mime = currentItem.mime;
           if (!mime) {
             if (currentItem.type === "video") {
-              mime = currentItem.extension === "webm" ? "video/webm" : "video/mp4";
+              mime =
+                currentItem.extension === "webm" ? "video/webm" : "video/mp4";
             } else {
-              if (currentItem.extension && currentItem.extension.toLowerCase() === "png")
+              if (
+                currentItem.extension &&
+                currentItem.extension.toLowerCase() === "png"
+              )
                 mime = "image/png";
-              else if (currentItem.extension && currentItem.extension.toLowerCase() === "webp")
+              else if (
+                currentItem.extension &&
+                currentItem.extension.toLowerCase() === "webp"
+              )
                 mime = "image/webp";
-              else if (currentItem.extension && currentItem.extension.toLowerCase() === "gif")
+              else if (
+                currentItem.extension &&
+                currentItem.extension.toLowerCase() === "gif"
+              )
                 mime = "image/gif";
               else mime = "image/jpeg";
             }
@@ -309,7 +319,11 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
     }
   };
 
-  const handleClone = () => {
+  const handleClone = async () => {
+    // Capture current medias (disk refs) before turning this into a new draft
+    const originalMedias = Array.isArray(form.Medias) ? [...form.Medias] : [];
+
+    // Prepare a new schedule draft (Id=0) with same fields, but without existing Medias
     const clonedSchedule: Schedule = {
       ...form,
       Id: 0,
@@ -325,18 +339,65 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
         : null,
       Created: new Date().toISOString(),
       LastRun: "",
-    };
+      Medias: [], // behave exactly like a brand new schedule (no existing medias)
+    } as Schedule;
     setForm(clonedSchedule);
 
-    // Reset media to just one empty slot
-    setMediaItems([
-      {
-        id: "new-0",
-        type: "image",
-        source: "new",
-        data: "",
-      },
-    ]);
+    // Convert existing medias to in-memory "new" items (base64), like freshly added attachments
+    const newItems: MediaItem[] = [];
+    for (let i = 0; i < originalMedias.length; i++) {
+      const rel = originalMedias[i];
+      try {
+        const dataUrl = await window.appApi.getMediaDataUrl(rel);
+        if (!dataUrl) continue;
+        const m = dataUrl.match(/^data:([^;]+);base64,(.*)$/i);
+        if (!m) continue;
+        const mime = (m[1] || "").toLowerCase();
+        const base64 = m[2] || "";
+        const isVideo =
+          rel.startsWith("video/") ||
+          mime.startsWith("video/") ||
+          /\.(mp4|webm)$/i.test(rel);
+        let extension = (() => {
+          if (mime.includes("mp4")) return "mp4";
+          if (mime.includes("webm")) return "webm";
+          if (mime.includes("png")) return "png";
+          if (mime.includes("webp")) return "webp";
+          if (mime.includes("gif")) return "gif";
+          const nameExt = rel.split(".").pop()?.toLowerCase();
+          if (nameExt) return nameExt;
+          return isVideo ? "mp4" : "jpg";
+        })();
+        const name = rel.split("/").pop() || rel;
+        newItems.push({
+          id: `new-${Date.now()}-${i}`,
+          type: isVideo ? "video" : "image",
+          source: "new",
+          data: base64,
+          extension,
+          mime,
+          preview: dataUrl,
+          name,
+        });
+      } catch {
+        // ignore individual failures
+      }
+    }
+
+    // If no medias existed, keep a single empty slot; else set converted items
+    if (newItems.length === 0) {
+      setMediaItems([
+        {
+          id: "new-0",
+          type: "image",
+          source: "new",
+          data: "",
+        },
+      ]);
+    } else {
+      setMediaItems(newItems);
+    }
+
     setCurrentMediaIndex(0);
     setCurrentMediaPreview(null);
     setRemovedMedia(new Set());
@@ -386,12 +447,12 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
                     ? "video/webm"
                     : "video/mp4"
                   : extFromMime === "png"
-                  ? "image/png"
-                  : extFromMime === "webp"
-                  ? "image/webp"
-                  : extFromMime === "gif"
-                  ? "image/gif"
-                  : "image/jpeg"),
+                    ? "image/png"
+                    : extFromMime === "webp"
+                      ? "image/webp"
+                      : extFromMime === "gif"
+                        ? "image/gif"
+                        : "image/jpeg"),
               preview: resultStr,
             };
           } else {
@@ -410,12 +471,12 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
                     ? "video/webm"
                     : "video/mp4"
                   : extFromMime === "png"
-                  ? "image/png"
-                  : extFromMime === "webp"
-                  ? "image/webp"
-                  : extFromMime === "gif"
-                  ? "image/gif"
-                  : "image/jpeg"),
+                    ? "image/png"
+                    : extFromMime === "webp"
+                      ? "image/webp"
+                      : extFromMime === "gif"
+                        ? "image/gif"
+                        : "image/jpeg"),
               preview: resultStr,
             });
             setCurrentMediaIndex(arr.length - 1);
