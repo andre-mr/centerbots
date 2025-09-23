@@ -35,6 +35,14 @@
 - **Gerenciamento de grupos de destino**: Para cada bot, selecione para quais grupos as mensagens serão replicadas.
 - **Fila de envio por bot**: Visualize, reordene e remova mensagens da fila de envio.
 - **Visualização de status em tempo real**: Acompanhe o status de cada bot (Online, Enviando, Desconectado).
+- **Modos de origem**: Filtre por mensagens de **Todas**, apenas **Privadas** ou apenas **Grupos**.
+- **Métodos de envio**: **Texto**, **Imagem** (gera miniatura a partir da mídia ou do link) ou **Encaminhar** a mensagem original.
+- **Links com parâmetros UTM**: Opcionalmente adicione `utm_source` (ex.: whatsapp) e `utm_medium` (nome do grupo) aos links.
+- **Relatórios de envio**: Envio opcional de resumo ao final do lote para os números autorizados.
+- **Pausas configuráveis**: Intervalos entre grupos e entre mensagens para reduzir riscos de bloqueio.
+- **Agendamentos**: Cadastre conteúdos para execução única, diária, semanal ou mensal; selecione um ou mais bots (respeita o plano da licença).
+- **Proxy opcional**: Configure proxy HTTP(S) por bot para a conexão com os servidores da Meta.
+- **Histórico**: Consulte o histórico recente e o estado atual da fila por bot.
 
 ---
 
@@ -78,6 +86,14 @@
 
 ---
 
+## 🔧 Configuração
+
+- **Variáveis de ambiente**: defina `MAIN_VITE_API_URL` nos arquivos `.env.*` para o endpoint de licença/sincronização (já apontando para produção por padrão).
+- **Licença e plano**: em `Configurações`, informe `ID do usuário` e `Chave de acesso`. O status pode ser `Ativo`, `Expirado` ou `Inativo`. Planos: `Básico`, `Completo` e `Corporativo` (alguns recursos, como sincronização/estatísticas e agendamentos, dependem do plano).
+- **Dados locais**: o banco **SQLite** é salvo em `userData/centerbots.db` (pasta de dados do Electron por SO). Credenciais de cada bot ficam isoladas.
+
+---
+
 ## 📝 Fluxo de Uso
 
 1. **Adicionar um bot**: Clique em <kbd>Adicionar Bot</kbd>, preencha as informações e ative-o para ler o QR Code com o WhatsApp do número desejado.
@@ -86,7 +102,7 @@
    - Configure outras opções, como pausas entre envios.
 3. **Selecionar grupos de destino**: Clique no botão <kbd>Grupos</kbd> no card do bot e selecione para quais grupos ele deve enviar as mensagens recebidas.
 4. **Iniciar um disparo**: Envie uma mensagem (texto, imagem, etc.) de um dos **números autorizados** para o número do bot.
-5. **Acompanhar o envio**: A aplicação irá automaticamente adicionar a mensagem à fila do bot e começar a enviá-la para os grupos selecionados. Você pode acompanhar o progresso e gerenciar a fila na tela de <kbd>Mensagens</kbd>.
+5. **Acompanhar o envio**: A aplicação adiciona a mensagem à fila do bot e inicia o envio para os grupos selecionados. Acompanhe o progresso e gerencie a fila na tela de <kbd>Mensagens</kbd>. Envie <kbd>status</kbd> para o bot (via WhatsApp) para receber um resumo rápido.
 
 ---
 
@@ -105,6 +121,7 @@
 - **Atualize sempre o Baileys**: Para manter compatibilidade com o WhatsApp Web.
 - **Gerencie credenciais com cuidado**: Cada bot tem seu diretório de autenticação.
 - **Os dados ficam armazenados localmente**.
+ - **Atualizações automáticas**: o aplicativo verifica e instala atualizações quando disponíveis.
 
 ---
 

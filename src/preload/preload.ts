@@ -32,6 +32,23 @@ const exposedApi = {
     ipcRenderer.invoke("bots:deleteMessageFromQueue", botId, idx),
   getGlobalStats: () => ipcRenderer.invoke("stats:getGlobal"),
 
+  // backup
+  createBackup: () => ipcRenderer.invoke("backup:create"),
+  restoreBackupHot: () => ipcRenderer.invoke("backup:restoreHot"),
+
+  // schedules
+  getAllSchedulesLite: () => ipcRenderer.invoke("schedules:getAllLite"),
+  getScheduleById: (id: number) => ipcRenderer.invoke("schedules:getById", id),
+  createSchedule: (schedule: any) =>
+    ipcRenderer.invoke("schedules:create", schedule),
+  updateSchedule: (schedule: any) =>
+    ipcRenderer.invoke("schedules:update", schedule),
+  deleteSchedule: (id: number) => ipcRenderer.invoke("schedules:delete", id),
+
+  // media
+  getMediaDataUrl: (relPath: string) =>
+    ipcRenderer.invoke("media:getDataUrl", relPath),
+
   onStatusUpdate: (callback: (bot: Bot) => void) => {
     const handler = (_event: any, bot: Bot) => callback(bot);
     ipcRenderer.on("bot:statusUpdate", handler);

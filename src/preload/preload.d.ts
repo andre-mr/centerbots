@@ -1,5 +1,6 @@
 import { ElectronAPI } from "@electron-toolkit/preload";
 import { Bot } from "../models/bot-model";
+import { Schedule } from "../models/schedule-model";
 import AppSettings from "@renderer/models/app-settings-model";
 import { BotGroup } from "../models/bot-group-model";
 import { Group } from "src/models/group-model";
@@ -57,6 +58,58 @@ interface ExposedApi {
   moveMessageToTop: (botId: number, idx: number) => Promise<void>;
   deleteMessageFromQueue: (botId: number, idx: number) => Promise<void>;
   getGlobalStats: () => Promise<GlobalStats>;
+
+  // backup
+  createBackup: () => Promise<
+    | { ok: true; path: string }
+    | { ok: false; error?: string; canceled?: boolean }
+  >;
+  restoreBackupHot: () => Promise<
+    { ok: true } | { ok: false; error?: string; canceled?: boolean }
+  >;
+
+  // schedules
+  getAllSchedulesLite: () => Promise<
+    {
+      Id: number;
+      Description: string;
+      Created: string;
+      LastRun: string;
+      BotIds: number[];
+      HasOnce: boolean;
+      HasDaily: boolean;
+      HasWeekly: boolean;
+      HasMonthly: boolean;
+      Once: {
+        Year: number;
+        Month: number;
+        Day: number;
+        Hour: number;
+        Minute: number;
+      } | null;
+      Daily: { Hour: number; Minute: number } | null;
+      Weekly: { Days: number[]; Hour: number; Minute: number } | null;
+      Monthly: { Dates: number[]; Hour: number; Minute: number } | null;
+    }[]
+  >;
+  getScheduleById: (id: number) => Promise<Schedule | null>;
+  createSchedule: (
+    schedule: Omit<Schedule, "Images"> & {
+      ImagesBase64?: (string | null)[];
+      VideosBase64?: Array<string | { Base64: string; Ext?: string }>;
+    }
+  ) => Promise<number>;
+  updateSchedule: (
+    schedule: Omit<Schedule, "Images"> & {
+      ImagesBase64?: (string | null)[];
+      VideosBase64?: Array<string | { Base64: string; Ext?: string }>;
+      RemovedMediaRelPaths?: string[];
+    }
+  ) => Promise<boolean>;
+  deleteSchedule: (id: number) => Promise<boolean>;
+
+  // media
+  getMediaDataUrl: (relPath: string) => Promise<string | null>;
 
   onLicenseInvalid: (callback: () => void) => () => void;
   onLicenseGrace: (callback: () => void) => () => void;

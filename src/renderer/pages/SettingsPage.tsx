@@ -57,6 +57,14 @@ const SettingsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<GlobalStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
+  const [backupStatus, setBackupStatus] = useState<
+    "idle" | "running" | "success" | "error"
+  >("idle");
+  const [backupMsg, setBackupMsg] = useState<string>("");
+  const [restoreStatus, setRestoreStatus] = useState<
+    "idle" | "running" | "success" | "error"
+  >("idle");
+  const [restoreMsg, setRestoreMsg] = useState<string>("");
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -90,6 +98,60 @@ const SettingsPage: React.FC = () => {
           }
         : prev
     );
+  };
+
+  const handleBackup = async () => {
+    try {
+      setBackupStatus("running");
+      setBackupMsg("");
+      const result = await (window as any).appApi.createBackup();
+      if (!result || (result as any).canceled) {
+        setBackupStatus("idle");
+        return;
+      }
+      if ((result as any).ok) {
+        setBackupStatus("success");
+        setBackupMsg("Backup salvo em " + (result as any).path);
+      } else {
+        setBackupStatus("error");
+        setBackupMsg((result as any).error || "Falha ao gerar backup");
+      }
+    } catch (err: any) {
+      setBackupStatus("error");
+      setBackupMsg(err?.message || "Erro inesperado ao gerar backup");
+    } finally {
+      setTimeout(() => {
+        setBackupStatus("idle");
+        setBackupMsg("");
+      }, 5000);
+    }
+  };
+
+  const handleRestore = async () => {
+    try {
+      setRestoreStatus("running");
+      setRestoreMsg("");
+      const result = await (window as any).appApi.restoreBackupHot();
+      if (!result || (result as any).canceled) {
+        setRestoreStatus("idle");
+        return;
+      }
+      if ((result as any).ok) {
+        setRestoreStatus("success");
+        setRestoreMsg("Restauração concluída. Reiniciando...");
+      } else {
+        setRestoreStatus("error");
+        setRestoreMsg((result as any).error || "Falha ao restaurar backup");
+      }
+    } catch (err: any) {
+      setRestoreStatus("error");
+      setRestoreMsg(err?.message || "Erro inesperado ao restaurar backup");
+    } finally {
+      setTimeout(() => {
+        setRestoreStatus("idle");
+        setRestoreMsg("");
+      }, 5000);
+    }
   };
 
   const handleSave = async () => {
@@ -241,6 +303,64 @@ const SettingsPage: React.FC = () => {
                   <span className="text-blue-800 dark:text-blue-200">
                     {new Date(settings.LastCheckin).toLocaleDateString("pt-BR")}
                   </span>
+                  <button
+                    type="button"
+                    onClick={handleBackup}
+                    disabled={backupStatus === "running"}
+                    className={`ml-auto rounded-full px-3 py-1 text-white transition-colors ${
+                      backupStatus === "running"
+                        ? "bg-gray-400 dark:bg-gray-600"
+                        : backupStatus === "success"
+                          ? "bg-emerald-600 hover:bg-emerald-700"
+                          : backupStatus === "error"
+                            ? "bg-red-600 hover:bg-red-700"
+                            : "bg-blue-600 hover:bg-blue-700"
+                    }`}
+                    title={
+                      backupStatus === "success"
+                        ? backupMsg || "Backup concluído"
+                        : backupStatus === "error"
+                          ? backupMsg || "Falha no backup"
+                          : ""
+                    }
+                  >
+                    {backupStatus === "running"
+                      ? "Gerando..."
+                      : backupStatus === "success"
+                        ? "Concluído"
+                        : backupStatus === "error"
+                          ? "Erro"
+                          : "Realizar Backup"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRestore}
+                    disabled={restoreStatus === "running"}
+                    className={`ml-2 rounded-full px-3 py-1 text-white transition-colors ${
+                      restoreStatus === "running"
+                        ? "bg-gray-400 dark:bg-gray-600"
+                        : restoreStatus === "success"
+                          ? "bg-emerald-600 hover:bg-emerald-700"
+                          : restoreStatus === "error"
+                            ? "bg-red-600 hover:bg-red-700"
+                            : "bg-indigo-600 hover:bg-indigo-700"
+                    }`}
+                    title={
+                      restoreStatus === "success"
+                        ? restoreMsg || "Restauração concluída"
+                        : restoreStatus === "error"
+                          ? restoreMsg || "Falha na restauração"
+                          : ""
+                    }
+                  >
+                    {restoreStatus === "running"
+                      ? "Restaurando..."
+                      : restoreStatus === "success"
+                        ? "Concluído"
+                        : restoreStatus === "error"
+                          ? "Erro"
+                          : "Restaurar Backup"}
+                  </button>
                 </div>
               </div>
             </div>

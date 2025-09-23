@@ -4,6 +4,14 @@ import AppSettings from "../models/app-settings-model";
 import { Group } from "../models/group-model";
 import { Member } from "../models/member-model";
 import { Message } from "../models/message-model";
+import {
+  Schedule,
+  OnceSchedule,
+  DailySchedule,
+  WeeklySchedule,
+  MonthlySchedule,
+} from "../models/schedule-model";
+import { deleteMedia } from "./media-storage";
 import { Bot } from "../models/bot-model";
 import {
   Status,
@@ -15,7 +23,6 @@ import { PlanStatus, PlanTier } from "../models/app-settings-options-model";
 import { BotGroup } from "../models/bot-group";
 import { AuthorizedNumber } from "../models/authorized-number-model";
 import { GlobalStats } from "../models/global-stats";
-import { logger } from "./logger";
 
 function all<T>(sql: string, params: any[] = []): Promise<T[]> {
   return new Promise((resolve, reject) => {
@@ -536,7 +543,7 @@ export async function createMessage(
 ): Promise<number> {
   const sql = `
     INSERT INTO messages
-      (content, timestamp, original_jid, sender_jid, image)
+      (content, timestamp, original_jid, sender_jid, schedule)
     VALUES (?, ?, ?, ?, ?)
   `;
   const { lastID } = await run(sql, [
@@ -544,7 +551,7 @@ export async function createMessage(
     message.Timestamp,
     message.OriginalJid,
     message.SenderJid,
-    message.Image ?? null,
+    message.Schedule ?? null,
   ]);
   if (botIds && botIds.length > 0) {
     await Promise.all(
@@ -566,7 +573,7 @@ export async function updateMessage(message: Message): Promise<void> {
            timestamp = ?,
            original_jid = ?,
            sender_jid = ?,
-           image = ?
+           schedule = ?
      WHERE id = ?
   `;
   await run(sql, [
@@ -574,7 +581,7 @@ export async function updateMessage(message: Message): Promise<void> {
     message.Timestamp,
     message.OriginalJid,
     message.SenderJid,
-    message.Image ?? null,
+    message.Schedule ?? null,
     message.Id,
   ]);
 }
@@ -587,7 +594,7 @@ export async function getMessageById(id: number): Promise<Message | null> {
       m.timestamp,
       m.original_jid,
       m.sender_jid,
-      m.image
+      m.schedule
     FROM messages AS m
     WHERE m.id = ?
   `;
@@ -597,7 +604,7 @@ export async function getMessageById(id: number): Promise<Message | null> {
     timestamp: string;
     original_jid: string | null;
     sender_jid: string | null;
-    image: Buffer | null;
+    schedule: string | null;
   }>(sql, [id]);
   return row
     ? new Message(
@@ -606,7 +613,9 @@ export async function getMessageById(id: number): Promise<Message | null> {
         row.timestamp,
         row.original_jid,
         row.sender_jid,
-        row.image,
+        null,
+        null,
+        row.schedule ?? null,
         null,
         null
       )
@@ -619,7 +628,7 @@ export async function getMessagesByPeriod(
   botId?: number
 ): Promise<Message[]> {
   let sql = `
-    SELECT m.id, m.content, m.timestamp, m.original_jid, m.sender_jid
+    SELECT m.id, m.content, m.timestamp, m.original_jid, m.sender_jid, m.schedule
       FROM messages m
   `;
   const params: any[] = [from, to];
@@ -644,6 +653,7 @@ export async function getMessagesByPeriod(
     timestamp: string;
     original_jid: string | null;
     sender_jid: string | null;
+    schedule: string | null;
   };
   const rows = await all<MessageRow>(sql, params);
   return rows.map(
@@ -656,9 +666,290 @@ export async function getMessagesByPeriod(
         row.sender_jid,
         null,
         null,
+        row.schedule ?? null,
+        null,
         null
       )
   );
+}
+
+/** SCHEDULES **/
+
+function parseBotIds(json: string | null | undefined): number[] {
+  if (!json) return [];
+  try {
+    const arr = JSON.parse(json);
+    return Array.isArray(arr)
+      ? arr.map((n) => Number(n)).filter((n) => !isNaN(n))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseJson<T>(json: string | null | undefined): T | null {
+  if (!json) return null;
+  try {
+    const obj = JSON.parse(json);
+    return obj as T;
+  } catch {
+    return null;
+  }
+}
+
+export async function createSchedule(schedule: Schedule): Promise<number> {
+  // Insert schedule with JSON contents/medias (no filesystem ops here)
+  await beginTransaction();
+  try {
+    const contents = (schedule.Contents || []).map((c) => (c ?? "").toString());
+    const medias = Array.isArray(schedule.Medias) ? schedule.Medias : [];
+
+    const { lastID } = await run(
+      `
+      INSERT INTO schedules (description, created, lastrun, bot_ids, once_json, daily_json, weekly_json, monthly_json, contents, medias)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        (schedule.Description ?? "").trim() || null,
+        schedule.Created,
+        schedule.LastRun ?? "",
+        JSON.stringify(schedule.BotIds ?? []),
+        schedule.Once ? JSON.stringify(schedule.Once) : null,
+        schedule.Daily ? JSON.stringify(schedule.Daily) : null,
+        schedule.Weekly ? JSON.stringify(schedule.Weekly) : null,
+        schedule.Monthly ? JSON.stringify(schedule.Monthly) : null,
+        JSON.stringify(contents),
+        JSON.stringify(medias),
+      ]
+    );
+
+    // ensure description (fallback to id)
+    if (!(schedule.Description ?? "").trim()) {
+      await run(`UPDATE schedules SET description = ? WHERE id = ?`, [
+        String(lastID),
+        lastID,
+      ]);
+    }
+
+    await commitTransaction();
+    return lastID;
+  } catch (err) {
+    await rollbackTransaction();
+    throw err;
+  }
+}
+
+export async function updateSchedule(schedule: Schedule): Promise<void> {
+  await beginTransaction();
+  try {
+    const contents = (schedule.Contents || []).map((c) => (c ?? "").toString());
+    await run(
+      `
+      UPDATE schedules
+         SET description = ?,
+             created = ?,
+             lastrun = ?,
+             bot_ids = ?,
+             once_json = ?,
+             daily_json = ?,
+             weekly_json = ?,
+             monthly_json = ?,
+             contents = ?,
+             medias = ?
+       WHERE id = ?
+      `,
+      [
+        (schedule.Description ?? "").trim() || null,
+        schedule.Created,
+        schedule.LastRun ?? "",
+        JSON.stringify(schedule.BotIds ?? []),
+        schedule.Once ? JSON.stringify(schedule.Once) : null,
+        schedule.Daily ? JSON.stringify(schedule.Daily) : null,
+        schedule.Weekly ? JSON.stringify(schedule.Weekly) : null,
+        schedule.Monthly ? JSON.stringify(schedule.Monthly) : null,
+        JSON.stringify(contents),
+        JSON.stringify(Array.isArray(schedule.Medias) ? schedule.Medias : []),
+        schedule.Id,
+      ]
+    );
+
+    await commitTransaction();
+  } catch (err) {
+    await rollbackTransaction();
+    throw err;
+  }
+}
+
+export async function deleteSchedule(id: number): Promise<void> {
+  // delete media files linked to this schedule
+  const row = await get<{ medias: string | null }>(
+    `SELECT medias FROM schedules WHERE id = ?`,
+    [id]
+  );
+  if (row?.medias) {
+    try {
+      const medias: string[] = JSON.parse(row.medias);
+      for (const rel of medias) {
+        try {
+          deleteMedia(rel);
+        } catch {}
+      }
+    } catch {}
+  }
+  await run(`DELETE FROM schedules WHERE id = ?`, [id]);
+}
+
+function mapScheduleRow(row: any): Schedule {
+  const once = parseJson<OnceSchedule>(row.once_json);
+  const daily = parseJson<DailySchedule>(row.daily_json);
+  const weekly = parseJson<WeeklySchedule>(row.weekly_json);
+  const monthly = parseJson<MonthlySchedule>(row.monthly_json);
+  // parse JSON fields
+  let contents: string[] = [];
+  let medias: string[] = [];
+  try {
+    contents = JSON.parse(row.contents || "[]");
+  } catch {}
+  try {
+    medias = JSON.parse(row.medias || "[]");
+  } catch {}
+  // Pure JSON mapping; Images field is unused (kept empty by design)
+  return new Schedule(
+    row.id,
+    row.description ?? "",
+    contents,
+    [],
+    medias,
+    row.created,
+    row.lastrun ?? "",
+    parseBotIds(row.bot_ids),
+    once,
+    daily,
+    weekly,
+    monthly
+  );
+}
+
+export async function getAllSchedules(): Promise<Schedule[]> {
+  const rows = await all<any>(
+    `SELECT id, description, created, lastrun, bot_ids, once_json, daily_json, weekly_json, monthly_json, contents, medias FROM schedules`
+  );
+  return rows.map(mapScheduleRow);
+}
+
+export async function getScheduleById(id: number): Promise<Schedule | null> {
+  const row = await get<any>(
+    `SELECT id, description, created, lastrun, bot_ids, once_json, daily_json, weekly_json, monthly_json, contents, medias FROM schedules WHERE id = ?`,
+    [id]
+  );
+  if (!row) return null;
+  // parse JSON fields
+  let contentsArr: string[] = [];
+  let mediasArr: string[] = [];
+  try {
+    contentsArr = JSON.parse(row.contents || "[]");
+  } catch {}
+  try {
+    mediasArr = JSON.parse(row.medias || "[]");
+  } catch {}
+  const once = parseJson<OnceSchedule>(row.once_json);
+  const daily = parseJson<DailySchedule>(row.daily_json);
+  const weekly = parseJson<WeeklySchedule>(row.weekly_json);
+  const monthly = parseJson<MonthlySchedule>(row.monthly_json);
+  return new Schedule(
+    row.id,
+    row.description ?? "",
+    contentsArr,
+    [],
+    mediasArr,
+    row.created,
+    row.lastrun ?? "",
+    parseBotIds(row.bot_ids),
+    once,
+    daily,
+    weekly,
+    monthly
+  );
+}
+
+export async function updateScheduleLastRun(id: number, lastRunIso: string) {
+  await run(`UPDATE schedules SET lastrun = ? WHERE id = ?`, [lastRunIso, id]);
+}
+
+function isScheduledForDate(s: Schedule, date: Date): boolean {
+  const y = date.getFullYear();
+  const m = date.getMonth() + 1; // 1-12
+  const d = date.getDate();
+  const dow = date.getDay(); // 0-6, Sunday=0
+
+  if (s.Once) {
+    if (s.Once.Year === y && s.Once.Month === m && s.Once.Day === d) {
+      return true;
+    }
+  }
+  if (s.Daily) return true;
+  if (s.Weekly) {
+    if (Array.isArray(s.Weekly.Days) && s.Weekly.Days.includes(dow))
+      return true;
+  }
+  if (s.Monthly) {
+    if (Array.isArray(s.Monthly.Dates) && s.Monthly.Dates.includes(d))
+      return true;
+  }
+  return false;
+}
+
+export async function getSchedulesForDate(date: Date): Promise<Schedule[]> {
+  const all = await getAllSchedules();
+  return all.filter((s) => isScheduledForDate(s, date));
+}
+
+export type ScheduleLite = {
+  Id: number;
+  Description: string;
+  Created: string;
+  LastRun: string;
+  BotIds: number[];
+  HasOnce: boolean;
+  HasDaily: boolean;
+  HasWeekly: boolean;
+  HasMonthly: boolean;
+  Once: OnceSchedule | null;
+  Daily: DailySchedule | null;
+  Weekly: WeeklySchedule | null;
+  Monthly: MonthlySchedule | null;
+};
+
+export async function getAllSchedulesLite(): Promise<ScheduleLite[]> {
+  const rows = await all<any>(
+    `SELECT id, description, created, lastrun, bot_ids, once_json, daily_json, weekly_json, monthly_json FROM schedules`
+  );
+  return rows
+    .map((row) => {
+      const botIds = parseBotIds(row.bot_ids);
+      const once = parseJson<OnceSchedule>(row.once_json);
+      const daily = parseJson<DailySchedule>(row.daily_json);
+      const weekly = parseJson<WeeklySchedule>(row.weekly_json);
+      const monthly = parseJson<MonthlySchedule>(row.monthly_json);
+      return {
+        Id: row.id as number,
+        Description: (row.description as string) || "",
+        Created: row.created as string,
+        LastRun: (row.lastrun as string) || "",
+        BotIds: botIds,
+        HasOnce: !!row.once_json,
+        HasDaily: !!row.daily_json,
+        HasWeekly: !!row.weekly_json,
+        HasMonthly: !!row.monthly_json,
+        Once: once,
+        Daily: daily,
+        Weekly: weekly,
+        Monthly: monthly,
+      } as ScheduleLite;
+    })
+    .sort((a, b) =>
+      a.Created < b.Created ? 1 : a.Created > b.Created ? -1 : 0
+    );
 }
 
 /** BOTS **/
@@ -1024,25 +1315,10 @@ export async function purgeOldMessages(): Promise<number> {
   const cutoff30 = new Date(
     Date.now() - 30 * 24 * 60 * 60 * 1000
   ).toISOString();
-  const cutoff7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
   const { changes } = await run(`DELETE FROM messages WHERE timestamp < ?`, [
     cutoff30,
   ]);
-
-  const updateResult = await run(
-    `UPDATE messages SET image = NULL WHERE timestamp < ? AND image IS NOT NULL`,
-    [cutoff7]
-  );
-
-  if (updateResult.changes > 0) {
-    try {
-      await run(`VACUUM`);
-    } catch (error) {
-      console.error("❌ Error running VACUUM:", error);
-      logger.error("❌ Error running VACUUM:", error);
-    }
-  }
 
   return changes;
 }

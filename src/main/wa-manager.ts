@@ -843,6 +843,7 @@ export class WaManager {
         }
 
         if (
+          bot.WhatsAppSources === WhatsAppSources.None ||
           !content ||
           (bot.LinkRequired && !/https?:\/\/[^\s]+/i.test(content)) ||
           (msg.key?.remoteJid?.endsWith("s.whatsapp.net") &&
@@ -866,10 +867,12 @@ export class WaManager {
               if (mediaBuffer) {
                 const processedBuffer = await sharp(mediaBuffer)
                   .resize({ width: 600, fit: "inside" })
-                  .jpeg({ quality: 50 })
+                  .flatten({ background: "#ffffff" })
+                  .jpeg({ quality: 95 })
                   .toBuffer();
                 const thumbnailBuffer = await sharp(mediaBuffer)
                   .resize({ width: 300, height: 300, fit: "inside" })
+                  .flatten({ background: "#ffffff" })
                   .jpeg({ quality: 50 })
                   .toBuffer();
                 imageBufferSet = {
@@ -897,6 +900,8 @@ export class WaManager {
           msg.key.remoteJid || null,
           sender,
           imageBufferSet?.processedBuffer || null,
+          null,
+          null,
           imageBufferSet?.processedBufferBase64 || null,
           msg
         );
@@ -1079,10 +1084,12 @@ export class WaManager {
         currentGroupIndex: 0,
         totalGroups: 0,
         queueLength: instance.messageQueue.length,
+        Scheduled: !!message.Schedule,
       };
     } else {
       instance.bot.sendingMessageInfo.queueLength =
         instance.messageQueue.length;
+      instance.bot.sendingMessageInfo.Scheduled = !!message.Schedule;
     }
 
     this.mainWindow.webContents.send("bot:statusUpdate", instance.bot);
@@ -1172,6 +1179,7 @@ export class WaManager {
           currentGroupIndex,
           totalGroups,
           queueLength: instance.messageQueue.length,
+          Scheduled: !!message.Schedule,
         };
         this.mainWindow.webContents.send("bot:statusUpdate", instance.bot);
 
@@ -1214,6 +1222,7 @@ export class WaManager {
           currentGroupIndex: 0,
           totalGroups: 0,
           queueLength: instance.messageQueue.length,
+          Scheduled: false,
         };
         state.currentGroupIndex = 0;
         if (
@@ -1278,6 +1287,7 @@ export class WaManager {
         currentGroupIndex: 0,
         totalGroups: 0,
         queueLength: 0,
+        Scheduled: false,
       };
 
       instance.bot.Status = Status.Online;
@@ -1461,11 +1471,13 @@ export class WaManager {
 
       const processedBuffer = await sharp(buffer)
         .resize({ width: 600, height: 600, fit: "cover" })
-        .jpeg({ quality: 50 })
+        .flatten({ background: "#ffffff" })
+        .jpeg({ quality: 95 })
         .toBuffer();
 
       const processedThumbnailBuffer = await sharp(buffer)
         .resize({ width: 300, height: 300, fit: "cover" })
+        .flatten({ background: "#ffffff" })
         .jpeg({ quality: 50 })
         .toBuffer();
 
@@ -1519,6 +1531,18 @@ export class WaManager {
     });
   }
 
+  public async stopAllBots() {
+    const ids = Array.from(this.bots.keys());
+    for (const id of ids) {
+      try {
+        await this.stopBotInstance(id);
+      } catch (e) {
+        console.error("Erro ao parar bot", id, e);
+        logger.error(`Erro ao parar bot ${id}`, e);
+      }
+    }
+  }
+
   private async updateBotGroupsAndMembersStats(botId: number) {
     const stats = await getBotGroupsAndMembers(botId);
     this.mainWindow.webContents.send("bot:groupsAndMembersStatsUpdate", {
@@ -1535,6 +1559,7 @@ export class WaManager {
 let waManager: WaManager | null = null;
 export function getWaManager(mainWindow?: Electron.BrowserWindow) {
   if (!waManager && mainWindow) waManager = new WaManager(mainWindow);
+  else if (waManager && mainWindow) waManager.mainWindow = mainWindow;
   return waManager!;
 }
 
@@ -1620,7 +1645,13 @@ async function sendMessageToGroup(
   };
 
   if (ephemeralDuration && ephemeralDuration > 0) {
-    if (message.Image) {
+    if (message.Video) {
+      return sendEphemeral({
+        video: message.Video,
+        caption: contentToSend,
+        mimetype: "video/mp4",
+      });
+    } else if (message.Image) {
       return sendEphemeral({
         image: message.Image,
         caption: contentToSend,
@@ -1641,7 +1672,13 @@ async function sendMessageToGroup(
       });
     }
   } else {
-    if (message.Image) {
+    if (message.Video) {
+      return instance.socket?.sendMessage(groupJid, {
+        video: message.Video,
+        caption: contentToSend,
+        mimetype: "video/mp4",
+      });
+    } else if (message.Image) {
       return instance.socket?.sendMessage(groupJid, {
         image: message.Image,
         caption: contentToSend,

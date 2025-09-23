@@ -74,7 +74,7 @@ export async function checkLicense(
     }
 
     const bots = await getAllBots();
-    const botNumbers = bots.map((bot) => bot.WaNumber || "");
+    const botNumbers = bots.map((bot) => `${bot.WaNumber || ""}#${bot.Id}`);
     if (
       JSON.stringify([...appSettings.RegisteredBots].sort()) !==
       JSON.stringify([...botNumbers].sort())
@@ -225,9 +225,41 @@ export async function sendSyncData(
     };
 
     if (botsData && botsData.length > 0) {
+      // Enterprise: always normalize WaNumber to "wa#id" before sending
+      const botsPayload = await (async () => {
+        if (appSettings.PlanTier !== PlanTier.Enterprise) return botsData;
+        try {
+          const allBots = await getAllBots();
+          const waToId = new Map(
+            allBots
+              .filter((b) => b.WaNumber)
+              .map((b) => [String(b.WaNumber), Number(b.Id)])
+          );
+          return botsData.map((b: any) => {
+            if (!b || typeof b !== "object") return b;
+            const waRaw = b.WaNumber != null ? String(b.WaNumber) : "";
+            if (!waRaw) return b;
+            const [pureWa] = waRaw.split("#", 2);
+            const idFromObj =
+              "Id" in b && b.Id != null ? Number(b.Id) : undefined;
+            const resolvedId =
+              (Number.isFinite(idFromObj as any)
+                ? (idFromObj as number)
+                : undefined) ?? waToId.get(pureWa);
+            if (resolvedId != null) {
+              return { ...b, WaNumber: `${pureWa}#${resolvedId}` };
+            }
+            // If id cannot be resolved, keep as-is (already may include #)
+            return b;
+          });
+        } catch {
+          return botsData;
+        }
+      })();
+
       const payload = {
         userData,
-        botsData,
+        botsData: botsPayload,
       };
       try {
         const response = await fetch(apiUrl, {

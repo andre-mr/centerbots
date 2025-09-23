@@ -212,8 +212,20 @@ const BotCard: React.FC<
             Nenhum envio no momento.
           </div>
         )}
-        <div className="mb-1 flex items-center gap-2 rounded bg-blue-50 p-1 dark:bg-slate-700 xl:mb-0 xl:p-0.5">
-          <span className="truncate text-xs text-blue-600 dark:text-blue-300">
+        <div
+          className={`mb-1 flex items-center gap-2 rounded p-1 xl:mb-0 xl:p-0.5 ${
+            bot.sendingMessageInfo?.Scheduled
+              ? "bg-violet-50 dark:bg-violet-900/20"
+              : "bg-blue-50 dark:bg-slate-700"
+          }`}
+        >
+          <span
+            className={`truncate text-xs ${
+              bot.sendingMessageInfo?.Scheduled
+                ? "text-violet-700 dark:text-violet-400"
+                : "text-blue-600 dark:text-blue-300"
+            }`}
+          >
             {bot.sendingMessageInfo?.currentGroup &&
             bot.sendingMessageInfo.queueLength > 0
               ? bot.sendingMessageInfo.currentGroup
@@ -221,7 +233,11 @@ const BotCard: React.FC<
           </span>
           <div className="h-2 flex-1 rounded bg-gray-200 dark:bg-gray-800 xl:h-1.5">
             <div
-              className="h-2 rounded bg-blue-500 transition-all dark:bg-blue-400"
+              className={`h-2 rounded transition-all ${
+                bot.sendingMessageInfo?.Scheduled
+                  ? "bg-violet-500 dark:bg-violet-500"
+                  : "bg-blue-500 dark:bg-blue-500"
+              }`}
               style={{
                 width: `${
                   bot.sendingMessageInfo?.currentGroup &&
@@ -240,7 +256,13 @@ const BotCard: React.FC<
               }}
             />
           </div>
-          <span className="ml-2 text-xs text-blue-600 dark:text-blue-300">
+          <span
+            className={`ml-2 text-xs ${
+              bot.sendingMessageInfo?.Scheduled
+                ? "text-violet-600 dark:text-violet-300"
+                : "text-blue-600 dark:text-blue-300"
+            }`}
+          >
             {bot.sendingMessageInfo?.currentGroup &&
             bot.sendingMessageInfo.queueLength > 0 ? (
               <>

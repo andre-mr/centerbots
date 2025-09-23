@@ -57,7 +57,12 @@ const HelpPage: React.FC = () => {
               Configurar
             </span>
             . No campo <b>"Números autorizados"</b>, insira os números de
-            WhatsApp que terão permissão para "comandar" este bot.
+            WhatsApp que terão permissão para "comandar" este bot. Ajuste, se
+            necessário, as opções de <b>Origem das mensagens</b> (Todas,
+            Privadas, Grupos), o <b>Método de envio</b> (Texto, Imagem ou
+            Encaminhar), <b>Somente com links</b>, <b>Adicionar parâmetros</b>
+            (UTM) e as <b>Pausas</b> entre grupos e entre mensagens. Opcional:
+            informe um <b>Proxy</b> para a conexão do bot.
           </li>
           <li>
             <b>Selecionar grupos de destino:</b> No card do bot, clique em{" "}
@@ -86,7 +91,7 @@ const HelpPage: React.FC = () => {
             WhatsApp após a autorização do dispositivo. Envie a mensagem{" "}
             <b>status</b> para o bot a partir do WhatsApp de um dos números
             autorizados, ele deve responder em alguns segundos, desde que a
-            origem das mensagens nas configurações estja <b>Todas</b> ou{" "}
+            origem das mensagens nas configurações esteja <b>Todas</b> ou{" "}
             <b>Privadas</b>.
           </li>
         </ol>
@@ -110,10 +115,30 @@ const HelpPage: React.FC = () => {
             Fila de envio com controle para reordenar ou excluir mensagens.
           </li>
           <li>Visualização de status de envio em tempo real.</li>
+          <li>Modos de origem: Todas, Privadas ou Grupos.</li>
+          <li>Métodos de envio: Texto, Imagem ou Encaminhar.</li>
           <li>
-            Proxy opcional para conexão com os servidores da meta por outro IP.
+            Parâmetros de link automáticos (utm_source/utm_medium) opcionais.
           </li>
+          <li>Relatório de envios para números autorizados (opcional).</li>
+          <li>Pausas configuráveis entre grupos e entre mensagens.</li>
+          <li>Proxy opcional para conexão por outro IP.</li>
+          <li>Histórico recente de mensagens e fila por bot.</li>
         </ul>
+      </section>
+
+      <hr className="mb-4 border-gray-300 dark:border-gray-700" />
+
+      <section className="mb-6">
+        <h3 className="mb-2 text-xl font-semibold text-gray-800 dark:text-gray-100">
+          🗓️ Agendamentos
+        </h3>
+        <p className="ml-6 text-gray-700 dark:text-gray-300">
+          Na seção <b>Agendamentos</b>, cadastre envios automáticos com um ou
+          mais conteúdos e imagens, selecione os bots e defina a periodicidade:
+          <b> único</b>, <b>diário</b>, <b>semanal</b> ou <b>mensal</b>.
+          Execuções respeitam o plano da licença vigente.
+        </p>
       </section>
 
       <hr className="mb-4 border-gray-300 dark:border-gray-700" />
@@ -182,6 +207,24 @@ const HelpPage: React.FC = () => {
       </section>
 
       <hr className="mb-4 border-gray-300 dark:border-gray-700" />
+
+      <section className="mb-6">
+        <h3 className="mb-2 text-xl font-semibold text-gray-800 dark:text-gray-100">
+          🔑 Licença e planos
+        </h3>
+        <ul className="ml-6 list-inside list-disc space-y-1 text-gray-700 dark:text-gray-300">
+          <li>
+            Informe <b>ID do usuário</b> e <b>chave de acesso</b> nas
+            <b> Configurações</b> para ativar. Status: Ativo, Expirado ou
+            Inativo.
+          </li>
+          <li>
+            Alguns recursos dependem do plano (ex.: sincronização/estatísticas
+            de grupos).
+          </li>
+          <li>O aplicativo verifica atualizações e pode se atualizar.</li>
+        </ul>
+      </section>
 
       <section className="mb-6">
         <h3 className="mb-2 text-xl font-semibold text-gray-800 dark:text-gray-100">

@@ -1,5 +1,13 @@
 import React, { useEffect, useState } from "react";
-import { MdDashboard, MdSettings, MdHelpOutline } from "react-icons/md";
+import {
+  MdDashboard,
+  MdSettings,
+  MdHelpOutline,
+  MdSchedule,
+} from "react-icons/md";
+import SchedulesPage from "./pages/SchedulesPage";
+import ScheduleDetailsPage from "./pages/ScheduleDetailsPage";
+import { Schedule } from "../models/schedule-model";
 import BotsPage from "./pages/BotsPage";
 import SettingsPage from "./pages/SettingsPage";
 import HelpPage from "./pages/HelpPage";
@@ -27,10 +35,34 @@ const App: React.FC = () => {
   const [botForMessages, setBotForMessages] = useState<Bot | null>(null);
   const [showExitModal, setShowExitModal] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [showScheduleDetails, setShowScheduleDetails] = useState(false);
+  const [selectedSchedule, setSelectedSchedule] = useState<Schedule | null>(
+    null
+  );
+  const [isScheduleNew, setIsScheduleNew] = useState(false);
   const { settings, refreshSettings } = useSettings();
+  const [botsLite, setBotsLite] = useState<
+    { Id: number; Campaign: string | null }[]
+  >([]);
+  const [activeBotIds, setActiveBotIds] = useState<number[]>([]);
+  // Persisted filters for schedules list
+  const [schedulesFilterType, setSchedulesFilterType] = useState<
+    "all" | "once" | "daily" | "weekly" | "monthly"
+  >("all");
+  const [schedulesOnlyToday, setSchedulesOnlyToday] = useState(false);
+  const [schedulesSortBy, setSchedulesSortBy] = useState<
+    "created" | "name" | "next"
+  >("next");
+  const [schedulesSelectedBotId, setSchedulesSelectedBotId] = useState<
+    number | null
+  >(null);
+  const [schedulesWeeklyDayFilter, setSchedulesWeeklyDayFilter] = useState<
+    number | null
+  >(null);
 
   const menuItems = [
     { id: "bots", title: "Bots", icon: MdDashboard },
+    { id: "schedules", title: "Agendamentos", icon: MdSchedule },
     { id: "settings", title: "Configurações", icon: MdSettings },
     { id: "help", title: "Ajuda", icon: MdHelpOutline },
   ];
@@ -66,11 +98,106 @@ const App: React.FC = () => {
     setShowBotDetails(true);
   };
 
+  const handleAddNewSchedule = () => {
+    const now = new Date();
+    const newSchedule: Schedule = new Schedule(
+      0,
+      "",
+      [""],
+      [],
+      [],
+      now.toISOString(),
+      "",
+      [],
+      {
+        Year: now.getFullYear(),
+        Month: now.getMonth() + 1,
+        Day: now.getDate(),
+        Hour: 8,
+        Minute: 0,
+      },
+      null,
+      null,
+      null
+    );
+    setSelectedSchedule(newSchedule);
+    setIsScheduleNew(true);
+    setShowScheduleDetails(true);
+  };
+
+  const handleShowScheduleDetails = async (id: number) => {
+    const s = await window.appApi.getScheduleById(id);
+    if (!s) return;
+    const schedule = new Schedule(
+      s.Id,
+      s.Description || "",
+      (s as any).Contents && Array.isArray((s as any).Contents)
+        ? (s as any).Contents
+        : [""],
+      [],
+      (s as any).Medias || [],
+      s.Created,
+      s.LastRun ?? "",
+      s.BotIds || [],
+      s.Once || null,
+      s.Daily || null,
+      s.Weekly || null,
+      s.Monthly || null
+    );
+    setSelectedSchedule(schedule);
+    setIsScheduleNew(false);
+    setShowScheduleDetails(true);
+  };
+
+  const handleCloseScheduleDetails = () => {
+    setShowScheduleDetails(false);
+    setSelectedSchedule(null);
+    setIsScheduleNew(false);
+  };
+
   const handleCloseBotDetails = () => {
     setShowBotDetails(false);
     setSelectedBot(null);
     setIsEditing(false);
   };
+
+  // Load bots (all) and active bot ids for schedules filtering/select
+  useEffect(() => {
+    let removeStatusUpdateListener: (() => void) | null = null;
+
+    const load = async () => {
+      try {
+        const [allBots, memBots] = await Promise.all([
+          window.appApi.getAllBots(),
+          window.appApi.getBotsMemoryState(),
+        ]);
+        setBotsLite(allBots.map((b) => ({ Id: b.Id, Campaign: b.Campaign })));
+        setActiveBotIds(
+          (memBots || []).filter((b: any) => b.Active).map((b: any) => b.Id)
+        );
+      } catch {}
+    };
+
+    load();
+
+    if (window.appApi.onStatusUpdate) {
+      removeStatusUpdateListener = window.appApi.onStatusUpdate(() => {
+        // On any bot status change, refresh active IDs
+        window.appApi
+          .getBotsMemoryState()
+          .then((mem) =>
+            setActiveBotIds(
+              (mem || []).filter((b: any) => b.Active).map((b: any) => b.Id)
+            )
+          )
+          .catch(() => {});
+      });
+    }
+
+    return () => {
+      if (removeStatusUpdateListener) removeStatusUpdateListener();
+    };
+  }, []);
 
   const handleShowBotGroups = (bot: Bot) => {
     setBotForGroups(bot);
@@ -107,6 +234,15 @@ const App: React.FC = () => {
         <BotMessagesPage bot={botForMessages} onBack={handleCloseBotMessages} />
       );
     }
+    if (showScheduleDetails && selectedSchedule) {
+      return (
+        <ScheduleDetailsPage
+          schedule={selectedSchedule}
+          isNew={isScheduleNew}
+          onBack={handleCloseScheduleDetails}
+        />
+      );
+    }
     if (showBotGroups && botForGroups) {
       return <BotGroupsPage bot={botForGroups} onBack={handleCloseBotGroups} />;
     }
@@ -134,6 +270,25 @@ const App: React.FC = () => {
         );
       case "settings":
         return <SettingsPage />;
+      case "schedules":
+        return (
+          <SchedulesPage
+            onAddNew={handleAddNewSchedule}
+            onOpen={(id) => handleShowScheduleDetails(id)}
+            bots={botsLite}
+            activeBotIds={activeBotIds}
+            filterType={schedulesFilterType}
+            setFilterType={setSchedulesFilterType}
+            onlyToday={schedulesOnlyToday}
+            setOnlyToday={setSchedulesOnlyToday}
+            sortBy={schedulesSortBy}
+            setSortBy={setSchedulesSortBy}
+            selectedBotId={schedulesSelectedBotId}
+            setSelectedBotId={setSchedulesSelectedBotId}
+            weeklyDayFilter={schedulesWeeklyDayFilter}
+            setWeeklyDayFilter={setSchedulesWeeklyDayFilter}
+          />
+        );
       case "help":
         if (settings?.PlanStatus === PlanStatus.Invalid)
           return <SettingsPage />;
@@ -229,6 +384,8 @@ const App: React.FC = () => {
                   setBotForGroups(null);
                   setShowBotMessages(false);
                   setBotForMessages(null);
+                  setShowScheduleDetails(false);
+                  setSelectedSchedule(null);
                 }}
               >
                 <item.icon

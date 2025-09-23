@@ -10,6 +10,7 @@ export enum WhatsAppSources {
   All = "All",
   Direct = "Direct",
   Group = "Group",
+  None = "None",
 }
 
 export enum SendMethods {
@@ -31,4 +32,5 @@ export interface SendingMessageInfo {
   currentGroupIndex: number;
   totalGroups: number;
   queueLength: number;
+  Scheduled: boolean;
 }

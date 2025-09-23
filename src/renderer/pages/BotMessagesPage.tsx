@@ -37,7 +37,7 @@ const BotMessagesPage: React.FC<BotMessagesPageProps> = ({ bot, onBack }) => {
         const now = new Date();
         const to = now.toISOString();
         const from = new Date(
-          now.getTime() - 7 * 24 * 60 * 60 * 1000
+          now.getTime() - 30 * 24 * 60 * 60 * 1000
         ).toISOString();
         const allMsgs = await window.appApi.getMessagesByPeriod(
           from,
@@ -136,7 +136,7 @@ const BotMessagesPage: React.FC<BotMessagesPageProps> = ({ bot, onBack }) => {
               })`}
             </h2>
           </div>
-          <div className="min-h-0 flex-1">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             {loadingHistory ? (
               <span className="ml-2 text-sm text-gray-400">Carregando...</span>
             ) : history.length === 0 ? (

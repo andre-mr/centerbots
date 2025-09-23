@@ -32,6 +32,7 @@ const messageListenModesTranslations = {
   [WhatsAppSources.All]: "Todas",
   [WhatsAppSources.Direct]: "Privadas",
   [WhatsAppSources.Group]: "Grupos",
+  [WhatsAppSources.None]: "Nenhuma",
 };
 
 const sendMethodsTranslations = {

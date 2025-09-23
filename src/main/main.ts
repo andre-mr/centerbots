@@ -11,6 +11,7 @@ import { getWaManager } from "./wa-manager";
 import { purgeOldMessages, getAppSettings } from "./db-commands";
 import { dbReady } from "./db-connection";
 import { checkLicense, sendSyncData } from "./server-manager";
+import { loadSchedulesForToday, tickSchedules } from "./schedule-manager";
 
 import { PlanTier } from "../models/app-settings-options-model";
 import { Status } from "../models/bot-options-model";
@@ -32,13 +33,11 @@ function createWindow(): BrowserWindow {
     },
   });
 
-  // setupIpcHandlers();
-
-  // mainWindow.webContents.on("before-input-event", (_event, input) => {
-  //   if (input.key === "F12" && input.type === "keyDown") {
-  //     mainWindow.webContents.openDevTools({ mode: "detach" });
-  //   }
-  // });
+  mainWindow.webContents.on("before-input-event", (_event, input) => {
+    if (input.key === "F12" && input.type === "keyDown") {
+      mainWindow.webContents.openDevTools({ mode: "detach" });
+    }
+  });
 
   mainWindow.maximize();
 
@@ -123,6 +122,25 @@ if (!gotTheLock) {
 
     mainWindow = createWindow();
 
+    const waManager = getWaManager(mainWindow);
+
+    const triggerInit = async () => {
+      try {
+        await dbReady;
+        waManager.init();
+      } catch (e) {
+        console.error("❌ Error during WaManager.init() after load:", e);
+        logger.error("❌ Error during WaManager.init() after load:", e);
+      }
+    };
+    if (mainWindow.webContents.isLoading()) {
+      mainWindow.webContents.once("did-finish-load", () => {
+        triggerInit();
+      });
+    } else {
+      triggerInit();
+    }
+
     await dbReady;
 
     try {
@@ -132,13 +150,15 @@ if (!gotTheLock) {
       logger.error("❌ Error purging old messages!", error);
     }
 
+    // Preload today's schedules once at startup
+    try {
+      await loadSchedulesForToday();
+    } catch (error) {
+      console.error("❌ Error loading today's schedules on startup!", error);
+      logger.error("❌ Error loading today's schedules on startup!", error);
+    }
+
     checkLicense(import.meta.env.MAIN_VITE_API_URL || "", mainWindow!);
-
-    const waManager = getWaManager(mainWindow);
-
-    mainWindow.webContents.once("did-finish-load", () => {
-      waManager.init();
-    });
 
     setupAutoUpdater(mainWindow);
 
@@ -152,6 +172,23 @@ if (!gotTheLock) {
         const now = new Date();
         const minute = now.getMinutes();
         const hour = now.getHours();
+
+        // schedules: refresh at midnight and check current minute
+        try {
+          if (hour === 0 && minute === 0) {
+            await loadSchedulesForToday(now);
+          }
+          await tickSchedules(now, waManager);
+        } catch (error) {
+          console.error(
+            "❌ Error running schedule tick (enterprise cron)!",
+            error
+          );
+          logger.error(
+            "❌ Error running schedule tick (enterprise cron)!",
+            error
+          );
+        }
 
         if (hour === 0 && minute === 15) {
           try {
@@ -220,6 +257,20 @@ if (!gotTheLock) {
         }
       });
     } else {
+      // Always run scheduler every minute (non-enterprise too)
+      cron.schedule("* * * * *", async () => {
+        const now = new Date();
+        try {
+          if (now.getHours() === 0 && now.getMinutes() === 0) {
+            await loadSchedulesForToday(now);
+          }
+          await tickSchedules(now, waManager);
+        } catch (error) {
+          console.error("❌ Error running schedule tick!", error);
+          logger.error("❌ Error running schedule tick!", error);
+        }
+      });
+
       cron.schedule("15 0 * * *", async () => {
         try {
           await checkLicense(
@@ -242,6 +293,26 @@ if (!gotTheLock) {
     app.on("activate", function () {
       if (BrowserWindow.getAllWindows().length === 0) {
         mainWindow = createWindow();
+        const waManager = getWaManager(mainWindow);
+        const triggerInit = async () => {
+          try {
+            await dbReady;
+            waManager.init();
+          } catch (e) {
+            console.error(
+              "❌ Error during WaManager.init() after activate:",
+              e
+            );
+            logger.error("❌ Error during WaManager.init() after activate:", e);
+          }
+        };
+        if (mainWindow.webContents.isLoading()) {
+          mainWindow.webContents.once("did-finish-load", () => {
+            triggerInit();
+          });
+        } else {
+          triggerInit();
+        }
       } else if (mainWindow) {
         if (mainWindow.isMinimized()) mainWindow.restore();
         mainWindow.focus();

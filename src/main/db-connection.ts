@@ -31,8 +31,20 @@ function get<T>(
   });
 }
 
+async function tableExists(
+  db: sqlite3.Database,
+  name: string
+): Promise<boolean> {
+  const row = await get<{ cnt: number }>(
+    db,
+    `SELECT COUNT(1) AS cnt FROM sqlite_master WHERE type = 'table' AND name = ?`,
+    [name]
+  );
+  return (row?.cnt || 0) > 0;
+}
+
 async function migrate(db: sqlite3.Database): Promise<void> {
-  const LATEST_VERSION = 4;
+  const LATEST_VERSION = 5;
   let row: any = await get(db, "PRAGMA user_version");
   let currentVersion = row?.user_version ?? 0;
 
@@ -125,6 +137,85 @@ async function migrate(db: sqlite3.Database): Promise<void> {
           if (!/duplicate column/i.test(err.message)) throw err;
         }
         currentVersion = 4;
+      } else if (currentVersion < 5) {
+        /* ------------------------------ Migration for version 5 ----------------------------- */
+        const botMessagesBackupTable = "tmp_bot_messages_backup";
+        let shouldRestoreBotMessages = false;
+        if (await tableExists(db, "bot_messages")) {
+          await run(db, `DROP TABLE IF EXISTS ${botMessagesBackupTable}`);
+          await run(
+            db,
+            `CREATE TEMP TABLE ${botMessagesBackupTable} AS
+               SELECT message_id, bot_id FROM bot_messages`
+          );
+          shouldRestoreBotMessages = true;
+        }
+
+        try {
+          await run(
+            db,
+            `CREATE TABLE IF NOT EXISTS messages_new (
+              id            INTEGER PRIMARY KEY AUTOINCREMENT,
+              content       TEXT,
+              timestamp     TEXT  NOT NULL,
+              original_jid  TEXT,
+              sender_jid    TEXT,
+              schedule      TEXT
+            )`
+          );
+          await run(
+            db,
+            `INSERT INTO messages_new (id, content, timestamp, original_jid, sender_jid, schedule)
+             SELECT id, content, timestamp, original_jid, sender_jid, NULL
+             FROM messages`
+          );
+          await run(db, `DROP TABLE messages`);
+          await run(db, `ALTER TABLE messages_new RENAME TO messages`);
+          await run(
+            db,
+            `CREATE INDEX IF NOT EXISTS idx_messages_sender_jid ON messages(sender_jid)`
+          );
+
+          if (shouldRestoreBotMessages) {
+            await run(
+              db,
+              `INSERT OR IGNORE INTO bot_messages (message_id, bot_id)
+                 SELECT message_id, bot_id FROM ${botMessagesBackupTable}`
+            );
+          }
+        } finally {
+          if (shouldRestoreBotMessages) {
+            try {
+              await run(db, `DROP TABLE IF EXISTS ${botMessagesBackupTable}`);
+            } catch {}
+          }
+        }
+
+        await run(
+          db,
+          `CREATE TABLE IF NOT EXISTS schedules (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            description  TEXT,
+            created      TEXT  NOT NULL,
+            lastrun      TEXT  NOT NULL DEFAULT '',
+            bot_ids      TEXT  NOT NULL,
+            once_json    TEXT,
+            daily_json   TEXT,
+            weekly_json  TEXT,
+            monthly_json TEXT,
+            contents     TEXT  NOT NULL DEFAULT '[]',
+            medias       TEXT  NOT NULL DEFAULT '[]'
+          )`
+        );
+        // Force sync: update all bots.updated to now (ISO string)
+        try {
+          const nowIso = new Date().toISOString();
+          await run(db, `UPDATE bots SET updated = ?`, [nowIso]);
+        } catch (err) {
+          // if bots table/column does not exist for some reason, ignore
+        }
+
+        currentVersion = 5;
       }
 
       await run(db, `PRAGMA user_version = ${currentVersion}`);
@@ -206,12 +297,12 @@ CREATE TABLE IF NOT EXISTS group_members (
 
 -- Messages (queued or sent)
 CREATE TABLE IF NOT EXISTS messages (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    content         TEXT,                    -- message text
-    timestamp       TEXT  NOT NULL,          -- ISO datetime of sending
-    original_jid    TEXT,                    -- WhatsApp ID of the received message
-    sender_jid      TEXT,                    -- sender's number
-    image           BLOB                     -- message image
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  content         TEXT,                    -- message text
+  timestamp       TEXT  NOT NULL,          -- ISO datetime of sending
+  original_jid    TEXT,                    -- WhatsApp ID of the received message
+  sender_jid      TEXT,                    -- sender's number
+  schedule        TEXT                     -- schedule description if created by scheduler
 );
 
 -- Authorized numbers per bot (N:N)
@@ -234,6 +325,21 @@ CREATE TABLE IF NOT EXISTS bot_messages (
     message_id  INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
     bot_id      INTEGER NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
     PRIMARY KEY (message_id, bot_id)
+);
+
+-- Schedules for automated messages
+CREATE TABLE IF NOT EXISTS schedules (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  description  TEXT,                    -- schedule title/description
+  created      TEXT  NOT NULL,          -- ISO datetime of creation
+  lastrun      TEXT  NOT NULL DEFAULT '', -- ISO datetime of last run
+  bot_ids      TEXT  NOT NULL,          -- JSON array of bot IDs
+  once_json    TEXT,                    -- JSON config for one-time run
+  daily_json   TEXT,                    -- JSON config for daily run
+  weekly_json  TEXT,                    -- JSON config for weekly run
+  monthly_json TEXT,                    -- JSON config for monthly run
+  contents     TEXT  NOT NULL DEFAULT '[]', -- JSON array of strings
+  medias       TEXT  NOT NULL DEFAULT '[]'   -- JSON array of strings (paths like image/... or video/...)
 );
 
 -- Indexes to speed up basic statistics queries:
@@ -306,3 +412,22 @@ export const dbReady: Promise<void> = new Promise((resolve, reject) => {
 });
 
 export default database;
+
+// Gracefully close the SQLite database to release file locks (for restore)
+export function closeDatabase(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      database.close((err) => {
+        if (err) {
+          console.error("Erro ao fechar banco de dados:", err);
+          logger.error("Erro ao fechar banco de dados:", err);
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    } catch (e) {
+      reject(e);
+    }
+  });
+}

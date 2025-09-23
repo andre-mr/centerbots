@@ -6,6 +6,7 @@ import {
   FiTrash2,
   FiCopy,
   FiChevronsUp,
+  FiClock,
 } from "react-icons/fi";
 
 interface BotMessageProps {
@@ -63,7 +64,7 @@ const BotMessage: React.FC<BotMessageProps> = ({
       key={msg.Id || idx}
       className={
         `mb-2 flex flex-col gap-1 rounded border-gray-200 p-1 text-sm shadow-md last:border-0 dark:border-gray-700 ` +
-        `${isFirst ? "relative bg-emerald-50 ring-2 ring-emerald-400 ring-opacity-60 dark:bg-emerald-950" : ""} `
+        `${isFirst ? (msg.Schedule ? "relative bg-violet-50 ring-2 ring-violet-400 ring-opacity-60 dark:bg-violet-950" : "relative bg-emerald-50 ring-2 ring-emerald-400 ring-opacity-60 dark:bg-emerald-950") : ""} `
       }
     >
       {isFirst && (
@@ -73,8 +74,21 @@ const BotMessage: React.FC<BotMessageProps> = ({
       )}
       <div className="flex flex-row items-center gap-4 text-gray-800 dark:text-gray-200">
         <span className="whitespace-nowrap font-bold">{dateStr}</span>
-        <span className="whitespace-nowrap font-semibold text-green-700 dark:text-green-400">
-          {sender}
+        <span
+          className={
+            msg.Schedule
+              ? "whitespace-nowrap font-semibold text-violet-700 dark:text-violet-400"
+              : "whitespace-nowrap font-semibold text-green-700 dark:text-green-400"
+          }
+        >
+          {msg.Schedule ? (
+            <div className="flex items-center gap-1">
+              <FiClock className="text-violet-700" />
+              <span>{msg.Schedule}</span>
+            </div>
+          ) : (
+            sender
+          )}
         </span>
         {isQueueItem && (
           <span className="ml-auto flex gap-1 text-base">
