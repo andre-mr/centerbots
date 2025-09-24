@@ -552,7 +552,7 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
               </label>
               <input
                 type="text"
-                className="rounded border border-gray-300 px-2 py-1 dark:border-gray-700 dark:bg-gray-800"
+                className="rounded border border-gray-300 px-2 py-1 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                 value={form.Description || ""}
                 onChange={(e) =>
                   setForm((prev) => ({ ...prev, Description: e.target.value }))
@@ -564,7 +564,7 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
               <label className="mb-1 block font-semibold text-gray-700 dark:text-gray-200">
                 Bots responsáveis pelo envio
               </label>
-              <div className="rounded border border-gray-200 px-2 py-1 dark:border-gray-800">
+              <div className="rounded border border-gray-200 px-2 py-1 dark:border-gray-800 dark:text-gray-100">
                 <div className="grid grid-cols-2 gap-1">
                   {bots.map((b) => {
                     const checked = form.BotIds.includes(b.Id);
@@ -593,7 +593,7 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
               <label className="mb-1 block font-semibold text-gray-700 dark:text-gray-200">
                 Tipo de agendamento
               </label>
-              <div className="rounded border border-gray-200 px-2 py-1 dark:border-gray-800">
+              <div className="rounded border border-gray-200 px-2 py-1 dark:border-gray-800 dark:text-gray-100">
                 <div className="flex gap-4">
                   {(
                     ["once", "daily", "weekly", "monthly"] as ScheduleType[]
@@ -625,6 +625,7 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
                 <div className="rounded border border-gray-200 px-2 py-1 dark:border-gray-800">
                   <div className="flex gap-2">
                     <input
+                      className="pl-1 dark:bg-gray-800 dark:text-gray-100"
                       type="date"
                       value={`${String(form.Once.Year).padStart(4, "0")}-${String(form.Once.Month).padStart(2, "0")}-${String(form.Once.Day).padStart(2, "0")}`}
                       onChange={(e) => {
@@ -643,7 +644,7 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
                       }}
                     />
                     <input
-                      className="font-semibold text-blue-700"
+                      className="rounded pl-1 font-semibold text-blue-700 dark:bg-gray-800 dark:text-gray-100"
                       type="time"
                       value={toTimeString(form.Once.Hour, form.Once.Minute)}
                       onChange={(e) =>
@@ -668,7 +669,7 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
                 </label>
                 <div className="rounded border border-gray-200 px-2 py-1 dark:border-gray-800">
                   <input
-                    className="font-semibold text-blue-700"
+                    className="rounded pl-1 font-semibold text-blue-700 dark:bg-gray-800 dark:text-gray-100"
                     type="time"
                     value={toTimeString(form.Daily.Hour, form.Daily.Minute)}
                     onChange={(e) =>
@@ -689,15 +690,15 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
                 </label>
                 <div className="rounded border border-gray-200 px-3 pb-1 pt-3 dark:border-gray-800">
                   <div className="mb-2 flex flex-col gap-1">
-                    <div className="grid grid-cols-5 gap-1">
+                    <div className="grid grid-cols-5 gap-1 dark:text-gray-100">
                       {[1, 2, 3, 4, 5].map((day) => renderWeeklyDayButton(day))}
                     </div>
-                    <div className="mt-1 grid grid-cols-2 gap-1">
+                    <div className="mt-1 grid grid-cols-2 gap-1 dark:text-gray-100">
                       {[6, 0].map((day) => renderWeeklyDayButton(day))}
                     </div>
                   </div>
                   <input
-                    className="font-semibold text-blue-700"
+                    className="rounded pl-1 font-semibold text-blue-700 dark:bg-gray-800 dark:text-gray-100"
                     type="time"
                     value={toTimeString(
                       (form.Weekly as any).Hour,
@@ -730,7 +731,7 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
                         <button
                           type="button"
                           key={d}
-                          className={`rounded border px-2 py-1 text-sm ${selected ? "border-emerald-600 bg-emerald-50 text-emerald-700" : "border-gray-300"}`}
+                          className={`rounded border px-2 py-1 text-sm ${selected ? "border-emerald-600 bg-emerald-50 text-emerald-700" : "border-gray-300 dark:text-gray-100"}`}
                           onClick={() =>
                             setForm((prev) => {
                               const arr = new Set(prev.Monthly!.Dates);
@@ -754,7 +755,7 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
                     })}
                   </div>
                   <input
-                    className="font-semibold text-blue-700"
+                    className="rounded pl-1 font-semibold text-blue-700 dark:bg-gray-800 dark:text-gray-100"
                     type="time"
                     value={toTimeString(form.Monthly.Hour, form.Monthly.Minute)}
                     onChange={(e) =>
@@ -778,7 +779,7 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
                 <label className="font-semibold text-gray-700 dark:text-gray-200">
                   Textos
                 </label>
-                <div className="flex items-center gap-2 text-sm">
+                <div className="flex items-center gap-2 text-sm dark:text-gray-100">
                   <button
                     type="button"
                     className={`w-6 rounded border px-2 py-0.5 ${contentIdx === 0 ? "cursor-not-allowed opacity-40" : "font-bold"}`}
@@ -788,7 +789,7 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
                   >
                     ‹
                   </button>
-                  <span className="tabular-nums">
+                  <span className="tabular-nums dark:text-gray-100">
                     {Math.min(
                       contentIdx + 1,
                       Math.max(1, (form.Contents || []).length)
@@ -797,7 +798,7 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
                   </span>
                   <button
                     type="button"
-                    className={`mr-5 w-6 rounded border px-2 py-0.5 ${contentIdx >= (form.Contents?.length || 1) - 1 ? "cursor-not-allowed opacity-40" : "font-bold"}`}
+                    className={`mr-5 w-6 rounded border px-2 py-0.5 dark:text-gray-100 ${contentIdx >= (form.Contents?.length || 1) - 1 ? "cursor-not-allowed opacity-40" : "font-bold"}`}
                     onClick={() =>
                       setContentIdx((i) =>
                         Math.min((form.Contents?.length || 1) - 1, i + 1)
@@ -869,7 +870,7 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
                 </div>
               </div>
               <textarea
-                className="h-60 rounded border border-gray-300 p-2 dark:border-gray-700 dark:bg-gray-800"
+                className="h-60 rounded border border-gray-300 p-2 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                 value={(form.Contents || [""])[contentIdx] || ""}
                 onChange={(e) =>
                   setForm((prev) => {
@@ -887,10 +888,10 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
                     Mídias
                   </label>
                 </div>
-                <div className="flex items-center gap-2 text-sm">
+                <div className="flex items-center gap-2 text-sm dark:text-gray-100">
                   <button
                     type="button"
-                    className={`w-6 rounded border px-2 py-0.5 ${currentMediaIndex === 0 ? "cursor-not-allowed opacity-40" : "font-bold"}`}
+                    className={`w-6 rounded border px-2 py-0.5 dark:text-gray-100 ${currentMediaIndex === 0 ? "cursor-not-allowed opacity-40" : "font-bold"}`}
                     onClick={() =>
                       setCurrentMediaIndex((i) => Math.max(0, i - 1))
                     }
@@ -908,7 +909,7 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
                   </span>
                   <button
                     type="button"
-                    className={`mr-5 w-6 rounded border px-2 py-0.5 ${
+                    className={`mr-5 w-6 rounded border px-2 py-0.5 dark:text-gray-100 ${
                       currentMediaIndex >= mediaItems.length - 1
                         ? "cursor-not-allowed opacity-40"
                         : "font-bold"

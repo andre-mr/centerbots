@@ -14,7 +14,6 @@ const HelpPage: React.FC = () => {
   return (
     <div className="flex h-full flex-col overflow-y-auto bg-white px-2 py-2 dark:bg-gray-900">
       <div className="mb-6 flex items-center gap-2">
-        <span className="text-3xl">🤖</span>
         <h2 className="text-3xl font-bold text-emerald-700 dark:text-emerald-400">
           Guia Rápido - CenterBots
           <span className="ml-4 text-xl text-gray-500 dark:text-gray-400">
@@ -28,11 +27,10 @@ const HelpPage: React.FC = () => {
           O que é o CenterBots?
         </h3>
         <p className="ml-6 text-gray-700 dark:text-gray-300">
-          O <b>CenterBots</b> é uma aplicação para{" "}
-          <b>replicar mensagens para múltiplos grupos</b> do WhatsApp. Ele não
-          envia mensagens para listas de contatos. O foco é receber uma mensagem
-          de um número autorizado e retransmiti-la automaticamente para uma
-          lista de grupos que você definir.
+          O <b>CenterBots</b> replica automaticamente mensagens de{" "}
+          <b>números autorizados</b> para <b>múltiplos grupos</b> do WhatsApp.
+          Não envia para listas de contatos. Suporta mensagens de <b>texto</b>,
+          <b> imagem</b> e <b>vídeo</b>.
         </p>
       </section>
 
@@ -44,55 +42,47 @@ const HelpPage: React.FC = () => {
         </h3>
         <ol className="ml-6 list-inside list-decimal space-y-2 text-gray-700 dark:text-gray-300">
           <li>
-            <b>Adicionar um bot:</b> Clique em{" "}
+            <b>Adicionar um bot:</b> clique em
             <span className="rounded bg-gray-100 px-1 font-mono dark:bg-gray-800">
-              Adicionar Bot
+              {" "}
+              Adicionar Bot{" "}
             </span>
-            . Após salvar, ative-o e leia o QR Code pelo WhatsApp da conta que
-            será o bot.
+            , salve, ative e leia o QR Code no WhatsApp da conta que será o bot.
           </li>
           <li>
-            <b>Configurar o bot:</b> Clique em{" "}
+            <b>Configurar:</b> em
             <span className="rounded bg-gray-100 px-1 font-mono dark:bg-gray-800">
-              Configurar
+              {" "}
+              Configurar{" "}
             </span>
-            . No campo <b>"Números autorizados"</b>, insira os números de
-            WhatsApp que terão permissão para "comandar" este bot. Ajuste, se
-            necessário, as opções de <b>Origem das mensagens</b> (Todas,
-            Privadas, Grupos), o <b>Método de envio</b> (Texto, Imagem ou
-            Encaminhar), <b>Somente com links</b>, <b>Adicionar parâmetros</b>
-            (UTM) e as <b>Pausas</b> entre grupos e entre mensagens. Opcional:
-            informe um <b>Proxy</b> para a conexão do bot.
+            , informe <b>Números autorizados</b> e ajuste <b>Origem</b>
+            (Todas/Privadas/Grupos), <b>Método de envio</b> (Texto, Imagem ou
+            Encaminhar), <b>Somente com links</b>, <b>Parâmetros</b> (UTM),
+            <b> Pausas</b> e <b>Proxy</b> (opcional).
           </li>
           <li>
-            <b>Selecionar grupos de destino:</b> No card do bot, clique em{" "}
+            <b>Grupos de destino:</b> no card do bot, clique em
             <span className="rounded bg-gray-100 px-1 font-mono dark:bg-gray-800">
-              Grupos
-            </span>{" "}
-            e marque todos os grupos para os quais este bot deverá enviar as
-            mensagens. O carregamento de todos os grupos pode levar um tempo
-            após ativação.
-          </li>
-          <li>
-            <b>Iniciar um envio:</b> Usando o WhatsApp de um dos números
-            autorizados, envie uma mensagem (texto ou imagem) para o número do
-            bot.
-          </li>
-          <li>
-            <b>Acompanhar o processo:</b> O CenterBots irá detectar a mensagem,
-            adicioná-la à fila e começar o disparo para os grupos selecionados.
-            Você pode ver a fila e o progresso na tela de{" "}
-            <span className="rounded bg-gray-100 px-1 font-mono dark:bg-gray-800">
-              Mensagens
+              {" "}
+              Grupos{" "}
             </span>
-            . Após a ativação por QR Code, caso o bot não fique online no
-            celular, ou não responda a mensagem, desative-o e reinicie a
-            aplicação para realizar uma nova conexão com os servidores do
-            WhatsApp após a autorização do dispositivo. Envie a mensagem{" "}
-            <b>status</b> para o bot a partir do WhatsApp de um dos números
-            autorizados, ele deve responder em alguns segundos, desde que a
-            origem das mensagens nas configurações esteja <b>Todas</b> ou{" "}
-            <b>Privadas</b>.
+            e selecione os grupos. Carregar todos os grupos pode levar alguns
+            instantes após a ativação.
+          </li>
+          <li>
+            <b>Iniciar envio:</b> do WhatsApp de um número autorizado, envie
+            <b> texto, imagem ou vídeo</b> para o número do bot.
+          </li>
+          <li>
+            <b>Acompanhar:</b> a mensagem entra na fila e o disparo inicia para
+            os grupos. Acompanhe em
+            <span className="rounded bg-gray-100 px-1 font-mono dark:bg-gray-800">
+              {" "}
+              Mensagens{" "}
+            </span>
+            . Se o bot não ficar online após o QR, desative-o e ative novamente
+            para uma nova conexão. Envie <b>status</b> (WhatsApp) para um resumo
+            rápido quando a origem for <b>Todas</b> ou <b>Privadas</b>.
           </li>
         </ol>
       </section>
@@ -101,29 +91,22 @@ const HelpPage: React.FC = () => {
 
       <section className="mb-6">
         <h3 className="mb-2 text-xl font-semibold text-gray-800 dark:text-gray-100">
-          ⚙️ Funcionalidades disponíveis
+          ⚙️ Funcionalidades
         </h3>
         <ul className="ml-6 list-inside list-disc space-y-1 text-gray-700 dark:text-gray-300">
-          <li>Gerenciamento de múltiplos bots (números de WhatsApp).</li>
           <li>
-            Disparo para grupos acionado por mensagem recebida de uma fonte
-            autorizada.
+            Múltiplos bots (números de WhatsApp) com credenciais isoladas.
           </li>
-          <li>Configuração de números autorizados para cada bot.</li>
-          <li>Seleção de grupos de destino para cada bot.</li>
           <li>
-            Fila de envio com controle para reordenar ou excluir mensagens.
+            Disparo para grupos acionado por mensagem de fonte autorizada.
           </li>
-          <li>Visualização de status de envio em tempo real.</li>
-          <li>Modos de origem: Todas, Privadas ou Grupos.</li>
-          <li>Métodos de envio: Texto, Imagem ou Encaminhar.</li>
+          <li>Números autorizados, seleção de grupos e fila por bot.</li>
+          <li>Status em tempo real; modos de origem e métodos de envio.</li>
+          <li>UTM em links, relatório de envios e pausas configuráveis.</li>
+          <li>Proxy opcional e histórico recente por bot.</li>
           <li>
-            Parâmetros de link automáticos (utm_source/utm_medium) opcionais.
+            <b>Backup e restauração</b> em Configurações.
           </li>
-          <li>Relatório de envios para números autorizados (opcional).</li>
-          <li>Pausas configuráveis entre grupos e entre mensagens.</li>
-          <li>Proxy opcional para conexão por outro IP.</li>
-          <li>Histórico recente de mensagens e fila por bot.</li>
         </ul>
       </section>
 
@@ -134,10 +117,9 @@ const HelpPage: React.FC = () => {
           🗓️ Agendamentos
         </h3>
         <p className="ml-6 text-gray-700 dark:text-gray-300">
-          Na seção <b>Agendamentos</b>, cadastre envios automáticos com um ou
-          mais conteúdos e imagens, selecione os bots e defina a periodicidade:
-          <b> único</b>, <b>diário</b>, <b>semanal</b> ou <b>mensal</b>.
-          Execuções respeitam o plano da licença vigente.
+          Cadastre envios automáticos com um ou mais conteúdos (texto e mídia),
+          selecione os bots e defina a periodicidade: <b>único</b>,{" "}
+          <b>diário</b>,<b> semanal</b> ou <b>mensal</b>.
         </p>
       </section>
 
@@ -151,22 +133,19 @@ const HelpPage: React.FC = () => {
           <li className="flex items-center gap-2">
             <MdCheckCircle className="text-2xl text-green-500 dark:text-green-400" />
             <span>
-              <b>Online:</b> O bot está conectado e pronto para enviar
-              mensagens.
+              <b>Online:</b> conectado e pronto para enviar.
             </span>
           </li>
           <li className="flex items-center gap-2">
             <IoSync className="animate-spin text-2xl text-blue-500 dark:text-blue-400" />
             <span>
-              <b>Enviando:</b> O bot está atualmente enviando mensagens para os
-              grupos.
+              <b>Enviando:</b> enviando mensagens aos grupos.
             </span>
           </li>
           <li className="flex items-center gap-2">
             <MdHighlightOff className="animate-pulse text-2xl text-yellow-500 dark:text-yellow-400" />
             <span>
-              <b>Desconectado:</b> O bot perdeu a conexão com os servidores do
-              WhatsApp e está tentando se reconectar.
+              <b>Desconectado:</b> tentando reconectar ao WhatsApp.
             </span>
           </li>
           <li className="flex items-center gap-2">
@@ -175,32 +154,31 @@ const HelpPage: React.FC = () => {
               <MdError className="relative text-2xl text-red-500 dark:text-red-400" />
             </span>
             <span>
-              <b>Deslogado:</b> O bot foi desconectado da conta e precisa ser
-              autorizado novamente por QR Code.
+              <b>Deslogado:</b> precisa autorizar novamente por QR Code.
             </span>
           </li>
           <li className="flex items-center gap-2">
             <MdPowerSettingsNew className="text-2xl text-gray-400 dark:text-gray-500" />
             <span>
-              <b>Offline:</b> O bot está desativado e não está operando.
+              <b>Offline:</b> desativado e inoperante.
             </span>
           </li>
         </ul>
 
         <h4 className="mb-2 mt-4 text-lg font-semibold text-gray-800 dark:text-gray-100">
-          ⏯️ Botão de Pausa/Retomada
+          ⏯️ Pausar/Retomar
         </h4>
         <ul className="ml-4 list-inside list-disc space-y-2 text-gray-700 dark:text-gray-300">
           <li className="flex items-center gap-2">
             <MdPauseCircleFilled className="text-2xl text-yellow-500 dark:text-yellow-400" />
             <span>
-              <b>Pausado:</b> O bot está ativo, mas temporariamente pausado.
+              <b>Pausado:</b> ativo, porém temporariamente parado.
             </span>
           </li>
           <li className="flex items-center gap-2">
             <MdPlayCircleFilled className="text-2xl text-green-500 dark:text-green-400" />
             <span>
-              <b>Retomado:</b> O bot foi retomado e está pronto para operar.
+              <b>Retomado:</b> pronto para operar.
             </span>
           </li>
         </ul>
@@ -214,15 +192,18 @@ const HelpPage: React.FC = () => {
         </h3>
         <ul className="ml-6 list-inside list-disc space-y-1 text-gray-700 dark:text-gray-300">
           <li>
-            Informe <b>ID do usuário</b> e <b>chave de acesso</b> nas
-            <b> Configurações</b> para ativar. Status: Ativo, Expirado ou
-            Inativo.
+            Informe <b>ID do usuário</b> e <b>chave de acesso</b> em
+            Configurações.
           </li>
           <li>
-            Alguns recursos dependem do plano (ex.: sincronização/estatísticas
-            de grupos).
+            Status: <b>Ativo</b>, <b>Expirado</b> ou <b>Inativo</b>.
           </li>
-          <li>O aplicativo verifica atualizações e pode se atualizar.</li>
+          <li>
+            Alguns recursos dependem do plano (ex.: sincronização/estatísticas).
+          </li>
+          <li>
+            O app verifica e instala <b>atualizações</b> automaticamente.
+          </li>
         </ul>
       </section>
 
@@ -231,22 +212,15 @@ const HelpPage: React.FC = () => {
           🛡️ Boas práticas
         </h3>
         <ul className="ml-6 list-inside list-disc space-y-1 text-gray-700 dark:text-gray-300">
-          <li>
-            Evite disparos excessivos para não ser bloqueado pelo WhatsApp.
-          </li>
-          <li>
-            Use apenas com o consentimento dos participantes dos grupos de
-            destino.
-          </li>
-          <li>
-            Não utilize para spam ou fins proibidos pelos termos do WhatsApp.
-          </li>
+          <li>Evite disparos excessivos para reduzir risco de bloqueio.</li>
+          <li>Use apenas com consentimento dos participantes dos grupos.</li>
+          <li>Não use para spam ou fins proibidos pelos termos do WhatsApp.</li>
           <li>Os dados ficam armazenados localmente no seu computador.</li>
         </ul>
       </section>
 
       <div className="mt-8 text-center text-sm text-gray-500 dark:text-gray-400">
-        CenterBots — Replicação de mensagens para grupos do WhatsApp, de forma
+        © 2025 CenterBots — replicação de mensagens para grupos do WhatsApp,
         simples e eficiente.
       </div>
     </div>

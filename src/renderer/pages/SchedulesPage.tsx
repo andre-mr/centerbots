@@ -397,12 +397,12 @@ const SchedulesPage: React.FC<Props> = ({
                   const dt = onceDate(s);
                   return dt != null && dt < now;
                 })()
-                  ? "bg-gray-50 opacity-70"
+                  ? "bg-gray-50 opacity-60"
                   : "bg-white"
               }`}
               onClick={() => onOpen(s.Id)}
             >
-              <div className="mb-1 rounded text-base font-bold text-violet-800 dark:text-violet-200">
+              <div className="mb-1 rounded text-base font-bold text-violet-800 dark:text-violet-400">
                 {s.Description || ""}
               </div>
               <div className="mb-1 flex items-center justify-between border-b text-sm font-semibold text-green-700 dark:text-green-200">
@@ -416,19 +416,6 @@ const SchedulesPage: React.FC<Props> = ({
                   );
                 })()}
               </div>
-              {/* <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
-                <span>Criado em</span>
-                <span>
-                  {new Date(s.Created).toLocaleString(undefined, {
-                    year: "numeric",
-                    month: "2-digit",
-                    day: "2-digit",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    hour12: false,
-                  })}
-                </span>
-              </div> */}
               <div className="mt-1 flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
                 <span>Última execução</span>
                 <span>
@@ -482,7 +469,7 @@ const SchedulesPage: React.FC<Props> = ({
       <div className="sticky top-0 z-10 mb-3 rounded border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-800 dark:bg-gray-800">
         <div className="flex w-full items-center gap-4">
           <select
-            className="rounded border border-gray-300 bg-white p-1 dark:border-gray-700 dark:bg-gray-800"
+            className="rounded border border-gray-300 bg-white p-1 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
             value={filterType}
             onChange={(e) =>
               setFilterType(
@@ -504,7 +491,7 @@ const SchedulesPage: React.FC<Props> = ({
 
           {filterType === "weekly" ? (
             <select
-              className="w-40 rounded border border-gray-300 bg-white p-1 dark:border-gray-700 dark:bg-gray-800"
+              className="w-40 rounded border border-gray-300 bg-white p-1 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
               value={weeklyDayFilter ?? -1}
               onChange={(e) => {
                 const v = Number(e.target.value);
@@ -521,7 +508,7 @@ const SchedulesPage: React.FC<Props> = ({
               ))}
             </select>
           ) : (
-            <label className="flex w-40 items-center justify-center gap-2 border-x text-sm">
+            <label className="flex w-40 items-center justify-center gap-2 border-x text-sm dark:text-gray-100">
               <input
                 className=""
                 type="checkbox"
@@ -533,7 +520,7 @@ const SchedulesPage: React.FC<Props> = ({
           )}
 
           <select
-            className="rounded border border-gray-300 bg-white p-1 dark:border-gray-700 dark:bg-gray-800"
+            className="rounded border border-gray-300 bg-white p-1 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
             value={selectedBotId ?? -1}
             onChange={(e) => {
               const v = Number(e.target.value);
@@ -554,7 +541,7 @@ const SchedulesPage: React.FC<Props> = ({
               ))}
           </select>
           <select
-            className="rounded border border-gray-300 bg-white p-1 dark:border-gray-700 dark:bg-gray-800"
+            className="rounded border border-gray-300 bg-white p-1 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
             value={sortBy}
             onChange={(e) =>
               setSortBy(e.target.value as "created" | "name" | "next")
@@ -570,7 +557,7 @@ const SchedulesPage: React.FC<Props> = ({
             placeholder="Nome do agendamento"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="flex w-full rounded border border-gray-300 bg-white p-1 dark:border-gray-700 dark:bg-gray-800"
+            className="flex w-full rounded border border-gray-300 bg-white p-1 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
           />
         </div>
       </div>
