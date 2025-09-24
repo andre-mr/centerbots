@@ -1,6 +1,6 @@
 {
   "name": "centerbots",
-  "version": "1.4.2",
+  "version": "1.5.0",
   "description": "CenterBots",
   "main": "./out/main/main.js",
   "author": "Andre MR",
