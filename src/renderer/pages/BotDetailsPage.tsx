@@ -115,6 +115,7 @@ const BotDetailsPage: React.FC<BotDetailsProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showUnlinkModal, setShowUnlinkModal] = useState(false);
 
   useEffect(() => {
     setFormData(bot);
@@ -183,6 +184,26 @@ const BotDetailsPage: React.FC<BotDetailsProps> = ({
     }
   };
 
+  const handleUnlink = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await window.appApi.unlinkBot(formData.Id);
+      if (result) {
+        onCancel();
+      }
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Ocorreu um erro ao desvincular"
+      );
+    } finally {
+      setIsLoading(false);
+      setShowUnlinkModal(false);
+    }
+  };
+
   const handleDelete = async () => {
     setIsLoading(true);
     setError(null);
@@ -245,7 +266,7 @@ const BotDetailsPage: React.FC<BotDetailsProps> = ({
               className="font-semibold text-gray-700 dark:text-gray-200"
               htmlFor="campaign"
             >
-              Nome da campanha
+              Nome do bot
             </label>
             <input
               id="campaign"
@@ -373,7 +394,7 @@ const BotDetailsPage: React.FC<BotDetailsProps> = ({
               className="font-semibold text-gray-700 dark:text-gray-200"
               htmlFor="linkParameters"
             >
-              Adicionar parâmetros
+              Adicionar parâmetros UTM
             </label>
             <select
               id="linkParameters"
@@ -430,13 +451,22 @@ const BotDetailsPage: React.FC<BotDetailsProps> = ({
       <div className="flex justify-between gap-2">
         <div className="flex space-x-2">
           {!isNew && (
-            <button
-              className="rounded-full bg-red-400 px-4 py-2 text-white hover:bg-red-500 dark:bg-red-600 dark:hover:bg-red-700"
-              onClick={() => setShowDeleteModal(true)}
-              disabled={isLoading}
-            >
-              Excluir
-            </button>
+            <div className="flex space-x-4">
+              <button
+                className="rounded-full bg-red-400 px-4 py-2 text-white hover:bg-red-500 dark:bg-red-600 dark:hover:bg-red-700"
+                onClick={() => setShowDeleteModal(true)}
+                disabled={isLoading}
+              >
+                Excluir
+              </button>
+              <button
+                className="rounded-full bg-amber-500 px-4 py-2 text-white hover:bg-amber-600 dark:bg-amber-600 dark:hover:bg-amber-700"
+                onClick={() => setShowUnlinkModal(true)}
+                disabled={isLoading}
+              >
+                Desvincular
+              </button>
+            </div>
           )}
         </div>
         <div className="flex space-x-4">
@@ -456,9 +486,45 @@ const BotDetailsPage: React.FC<BotDetailsProps> = ({
           </button>
         </div>
       </div>
+      {showUnlinkModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-1/2 rounded bg-white p-6 shadow-lg dark:bg-gray-800 dark:text-gray-200 lg:w-1/3">
+            <h2 className="mb-4 text-xl font-bold">Confirmar desvinculação</h2>
+            <p className="mb-2 whitespace-pre-wrap">
+              O bot será desconectado. Para utilização, será necessário
+              autorizar novamente por QR Code, podendo usar o mesmo ou outro
+              número WhatsApp.
+            </p>
+            <p className="mb-6 text-red-500 dark:text-red-400">
+              Ao desvincular o bot{" "}
+              <span className="font-semibold">
+                "{formData.Campaign || formData.WaNumber}"
+              </span>
+              , as credenciais serao removidas.
+            </p>
+            <div className="flex justify-between gap-2">
+              <button
+                className="rounded bg-gray-200 px-4 py-2 dark:bg-gray-600"
+                onClick={() => setShowUnlinkModal(false)}
+                disabled={isLoading}
+              >
+                Cancelar
+              </button>
+              <button
+                className="rounded bg-red-500 px-4 py-2 text-white"
+                onClick={handleUnlink}
+                disabled={isLoading}
+              >
+                Confirmar desvinculacao
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showDeleteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="rounded bg-white p-6 shadow-lg dark:bg-gray-800">
+          <div className="rounded bg-white p-6 shadow-lg dark:bg-gray-800 dark:text-gray-200">
             <h2 className="mb-4 text-xl font-bold">Confirmar exclusão</h2>
             <p className="mb-2">
               Tem certeza que deseja excluir o bot{" "}
@@ -472,7 +538,7 @@ const BotDetailsPage: React.FC<BotDetailsProps> = ({
             </p>
             <div className="flex justify-between gap-2">
               <button
-                className="rounded bg-gray-200 px-4 py-2"
+                className="rounded bg-gray-200 px-4 py-2 dark:bg-gray-600"
                 onClick={() => setShowDeleteModal(false)}
                 disabled={isLoading}
               >

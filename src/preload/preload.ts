@@ -10,6 +10,7 @@ const exposedApi = {
   createBot: (bot: Bot) => ipcRenderer.invoke("bots:create", bot),
   updateBot: (bot: Bot) => ipcRenderer.invoke("bots:update", bot),
   deleteBot: (botId: number) => ipcRenderer.invoke("bots:delete", botId),
+  unlinkBot: (botId: number) => ipcRenderer.invoke("bots:unlink", botId),
   getAllBots: () => ipcRenderer.invoke("bots:getAll"),
   getGroupsByBot: (botId: number) =>
     ipcRenderer.invoke("bots:getGroupsByBot", botId),

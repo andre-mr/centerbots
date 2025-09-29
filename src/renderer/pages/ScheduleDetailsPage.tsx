@@ -531,13 +531,21 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
 
   return (
     <div className="flex h-full flex-col justify-between gap-6">
-      <div className="">
+      <div>
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">
             {isDraftNew
               ? "Novo agendamento"
               : `Editar agendamento "${(form.Description || `#${form.Id}`).toString()}"`}
           </h2>
+          <p className="text-sm italic text-gray-600 dark:text-gray-400">
+            Última execução:{" "}
+            <span className="ml-1">
+              {schedule.LastRun
+                ? new Date(schedule.LastRun).toLocaleString()
+                : "N/D"}
+            </span>
+          </p>
         </div>
         {error && (
           <p className="text-center text-red-500 dark:text-red-400">
@@ -552,7 +560,7 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
               </label>
               <input
                 type="text"
-                className="rounded border border-gray-300 px-2 py-1 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                className="rounded border border-gray-200 px-2 py-1 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                 value={form.Description || ""}
                 onChange={(e) =>
                   setForm((prev) => ({ ...prev, Description: e.target.value }))
@@ -782,7 +790,7 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
                 <div className="flex items-center gap-2 text-sm dark:text-gray-100">
                   <button
                     type="button"
-                    className={`w-6 rounded border px-2 py-0.5 ${contentIdx === 0 ? "cursor-not-allowed opacity-40" : "font-bold"}`}
+                    className={`w-6 rounded border px-2 py-0.5 ${contentIdx === 0 ? "cursor-not-allowed opacity-40" : "bg-emerald-100 font-bold"}`}
                     onClick={() => setContentIdx((i) => Math.max(0, i - 1))}
                     disabled={contentIdx === 0}
                     title="Anterior"
@@ -798,7 +806,7 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
                   </span>
                   <button
                     type="button"
-                    className={`mr-5 w-6 rounded border px-2 py-0.5 dark:text-gray-100 ${contentIdx >= (form.Contents?.length || 1) - 1 ? "cursor-not-allowed opacity-40" : "font-bold"}`}
+                    className={`mr-5 w-6 rounded border px-2 py-0.5 dark:text-gray-100 ${contentIdx >= (form.Contents?.length || 1) - 1 ? "cursor-not-allowed opacity-40" : "bg-emerald-100 font-bold"}`}
                     onClick={() =>
                       setContentIdx((i) =>
                         Math.min((form.Contents?.length || 1) - 1, i + 1)
@@ -812,7 +820,7 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
                   {/* Remove and Add controls */}
                   <button
                     type="button"
-                    className={`w-8 rounded bg-emerald-600 px-2 py-0.5 text-white ${
+                    className={`mx-2 w-8 rounded bg-emerald-600 px-2 py-0.5 text-white ${
                       (form.Contents || []).length > 0 &&
                       (
                         (form.Contents || [""])[
@@ -870,7 +878,7 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
                 </div>
               </div>
               <textarea
-                className="h-60 rounded border border-gray-300 p-2 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                className="h-60 rounded border border-gray-200 p-2 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                 value={(form.Contents || [""])[contentIdx] || ""}
                 onChange={(e) =>
                   setForm((prev) => {
@@ -891,7 +899,7 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
                 <div className="flex items-center gap-2 text-sm dark:text-gray-100">
                   <button
                     type="button"
-                    className={`w-6 rounded border px-2 py-0.5 dark:text-gray-100 ${currentMediaIndex === 0 ? "cursor-not-allowed opacity-40" : "font-bold"}`}
+                    className={`w-6 rounded border px-2 py-0.5 dark:text-gray-100 ${currentMediaIndex === 0 ? "cursor-not-allowed opacity-40" : "bg-emerald-100 font-bold"}`}
                     onClick={() =>
                       setCurrentMediaIndex((i) => Math.max(0, i - 1))
                     }
@@ -912,7 +920,7 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
                     className={`mr-5 w-6 rounded border px-2 py-0.5 dark:text-gray-100 ${
                       currentMediaIndex >= mediaItems.length - 1
                         ? "cursor-not-allowed opacity-40"
-                        : "font-bold"
+                        : "bg-emerald-100 font-bold"
                     }`}
                     onClick={() =>
                       setCurrentMediaIndex((i) =>
@@ -926,7 +934,7 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
                   </button>
                   <button
                     type="button"
-                    className={`w-8 rounded bg-emerald-600 px-2 py-0.5 text-white ${
+                    className={`mx-2 w-8 rounded bg-emerald-600 px-2 py-0.5 text-white ${
                       mediaItems.length > 0 &&
                       mediaItems[mediaItems.length - 1]?.source === "new" &&
                       !mediaItems[mediaItems.length - 1]?.data?.trim()
@@ -1010,7 +1018,7 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
                 </div>
               </div>
               <div
-                className="flex h-80 items-center justify-center rounded border border-dashed border-gray-400 bg-gray-50 dark:border-gray-700 dark:bg-gray-800"
+                className="flex h-80 items-center justify-center rounded border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800"
                 onPaste={handlePaste}
               >
                 {currentMediaPreview && mediaItems[currentMediaIndex] ? (

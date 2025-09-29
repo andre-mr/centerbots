@@ -33,7 +33,7 @@ CenterBots é um app desktop (Electron + TypeScript) para replicar mensagens rec
 - Parâmetros UTM opcionais em links (`utm_source`, `utm_medium`).
 - Relatórios de envio (opcional) para os números autorizados.
 - Pausas configuráveis entre grupos e entre mensagens.
-- Agendamentos (único, diário, semanal, mensal) com mídia.
+- Agendamentos (único, diário, semanal, mensal) com mídia e variação automática de conteúdos cadastrados.
 - Proxy HTTP(S) opcional por bot.
 - Histórico recente e estado da fila por bot.
 - Backup e restauração do banco de dados (em Configurações).
@@ -63,7 +63,7 @@ CenterBots é um app desktop (Electron + TypeScript) para replicar mensagens rec
 ## Fluxo de Uso
 
 1. Adicionar um bot: clique em Adicionar Bot, salve e ative para ler o QR Code com o WhatsApp do número desejado.
-2. Configurar: defina Números autorizados, pausas, origem das mensagens, método de envio, parâmetros de link e proxy (opcional).
+2. Configurar: defina Números autorizados, pausas, origem das mensagens, método de envio, parâmetros de link e proxy (opcional). Exclua o bot ou desvincule WhatsApp removendo credenciais.
 3. Grupos de destino: selecione os grupos por bot.
 4. Iniciar disparo: envie mensagem (texto, imagem ou vídeo) de um número autorizado para o bot.
 5. Acompanhar: veja a fila em Mensagens. Envie “status” ao bot via WhatsApp para um resumo rápido.

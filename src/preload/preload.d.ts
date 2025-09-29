@@ -14,6 +14,7 @@ interface ExposedApi {
   createBot: (bot: Bot) => Promise<Bot[]>;
   updateBot: (bot: Bot) => Promise<Bot[]>;
   deleteBot: (botId: number) => Promise<Bot[]>;
+  unlinkBot: (botId: number) => Promise<boolean>;
   getAllBots: () => Promise<Bot[]>;
 
   getGroupsByBot: (botId: number) => Promise<Group[]>;

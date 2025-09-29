@@ -58,7 +58,9 @@ const HelpPage: React.FC = () => {
             , informe <b>Números autorizados</b> e ajuste <b>Origem</b>
             (Todas/Privadas/Grupos), <b>Método de envio</b> (Texto, Imagem ou
             Encaminhar), <b>Somente com links</b>, <b>Parâmetros</b> (UTM),
-            <b> Pausas</b> e <b>Proxy</b> (opcional).
+            <b> Pausas</b> e <b>Proxy</b> (opcional). Nessa área também é
+            possível excluir o bot ou desvinculá-lo (remover credenciais) para
+            nova leitura de QR Code.
           </li>
           <li>
             <b>Grupos de destino:</b> no card do bot, clique em
@@ -119,7 +121,11 @@ const HelpPage: React.FC = () => {
         <p className="ml-6 text-gray-700 dark:text-gray-300">
           Cadastre envios automáticos com um ou mais conteúdos (texto e mídia),
           selecione os bots e defina a periodicidade: <b>único</b>,{" "}
-          <b>diário</b>,<b> semanal</b> ou <b>mensal</b>.
+          <b>diário</b>,<b> semanal</b> ou <b>mensal</b>. As mensagens serão
+          enfileiradas nos bots escolhidos para cada agendamento no horário
+          definido, com cor e indicação que as diferenciam das demais. Para{" "}
+          <b>variação automática de conteúdo</b>, escolha múltiplos textos ou
+          mídias. O agendamento fará o sorteio no momento do envio.
         </p>
       </section>
 
@@ -220,8 +226,8 @@ const HelpPage: React.FC = () => {
       </section>
 
       <div className="mt-8 text-center text-sm text-gray-500 dark:text-gray-400">
-        © 2025 CenterBots — replicação de mensagens para grupos do WhatsApp,
-        simples e eficiente.
+        © 2025 CenterBots — envio automatizado de mensagens para grupos de
+        WhatsApp, simples e eficiente.
       </div>
     </div>
   );

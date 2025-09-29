@@ -4,6 +4,7 @@ import {
   getGroupsByBotId,
   updateBot,
   deleteBot,
+  clearAuthState,
   createBot,
   getAppSettings,
   updateAppSettings,
@@ -100,6 +101,19 @@ export function setupIpcHandlers() {
     }
     await deleteBot(botId);
     return getAllBots();
+  });
+
+  ipcMain.handle("bots:unlink", async (_event, botId: number) => {
+    if (!botId) throw new Error("Bot ID e obrigatorio");
+
+    const waManager = getWaManager();
+    await waManager.updateBotMemoryState(botId, {
+      Active: false,
+    });
+
+    await clearAuthState(botId);
+
+    return true;
   });
 
   ipcMain.handle("bots:getAll", async () => {
@@ -324,7 +338,9 @@ export function setupIpcHandlers() {
       // Persist images to disk and update medias
       const desc = (data.Description || String(id)).toString();
       const mediaPaths: string[] = [];
-      const detectFromBase64 = (input: string): { base64: string; ext: string } => {
+      const detectFromBase64 = (
+        input: string
+      ): { base64: string; ext: string } => {
         let payload = input;
         let ext = "jpg";
         if (payload.startsWith("data:")) {
@@ -342,9 +358,22 @@ export function setupIpcHandlers() {
         try {
           const buf = Buffer.from(payload, "base64");
           if (buf.length >= 12) {
-            if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) ext = "png";
-            else if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) ext = "jpg";
-            else if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38) ext = "gif";
+            if (
+              buf[0] === 0x89 &&
+              buf[1] === 0x50 &&
+              buf[2] === 0x4e &&
+              buf[3] === 0x47
+            )
+              ext = "png";
+            else if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff)
+              ext = "jpg";
+            else if (
+              buf[0] === 0x47 &&
+              buf[1] === 0x49 &&
+              buf[2] === 0x46 &&
+              buf[3] === 0x38
+            )
+              ext = "gif";
             else if (
               buf[0] === 0x52 &&
               buf[1] === 0x49 &&
@@ -446,7 +475,9 @@ export function setupIpcHandlers() {
 
       const desc = (data.Description || String(data.Id)).toString();
       const newImagePaths: string[] = [];
-      const detectFromBase64 = (input: string): { base64: string; ext: string } => {
+      const detectFromBase64 = (
+        input: string
+      ): { base64: string; ext: string } => {
         let payload = input;
         let ext = "jpg";
         if (payload.startsWith("data:")) {
@@ -464,9 +495,22 @@ export function setupIpcHandlers() {
         try {
           const buf = Buffer.from(payload, "base64");
           if (buf.length >= 12) {
-            if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) ext = "png";
-            else if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) ext = "jpg";
-            else if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38) ext = "gif";
+            if (
+              buf[0] === 0x89 &&
+              buf[1] === 0x50 &&
+              buf[2] === 0x4e &&
+              buf[3] === 0x47
+            )
+              ext = "png";
+            else if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff)
+              ext = "jpg";
+            else if (
+              buf[0] === 0x47 &&
+              buf[1] === 0x49 &&
+              buf[2] === 0x46 &&
+              buf[3] === 0x38
+            )
+              ext = "gif";
             else if (
               buf[0] === 0x52 &&
               buf[1] === 0x49 &&
