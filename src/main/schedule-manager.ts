@@ -13,6 +13,60 @@ import sharp from "sharp";
 import fs from "fs";
 import { resolveAbsolutePath, inferKindFromPath } from "./media-storage";
 
+async function extractVideoThumbnailBase64(
+  filePath: string
+): Promise<string | null> {
+  try {
+    const ffmpeg = require("fluent-ffmpeg");
+
+    const ffmpegModulePath = require("ffmpeg-static");
+    if (!ffmpegModulePath) {
+      return null;
+    }
+    let executablePath: string = ffmpegModulePath;
+    if (executablePath.includes("app.asar")) {
+      executablePath = executablePath.replace("app.asar", "app.asar.unpacked");
+    }
+    if (!fs.existsSync(executablePath)) {
+      return null;
+    }
+    ffmpeg.setFfmpegPath(executablePath);
+    return await new Promise<string | null>((resolve) => {
+      try {
+        const chunks: Buffer[] = [];
+        const command = ffmpeg(filePath)
+          .inputOptions(["-ss", "00:00:00.5"]) // evita frame inicial muito escuro/branco
+          .frames(1)
+          .videoFilters("scale=300:-2")
+          .outputOptions(["-f", "image2pipe", "-vcodec", "mjpeg", "-q:v", "5"]);
+        const stream = command.on("error", () => resolve(null)).pipe();
+        stream.on("data", (d: Buffer) => chunks.push(Buffer.from(d)));
+        stream.on("end", async () => {
+          try {
+            const buf = Buffer.concat(chunks);
+            if (!buf || buf.length === 0) return resolve(null);
+            try {
+              const compact = await sharp(buf)
+                .resize({ width: 144, fit: "inside" })
+                .jpeg({ quality: 40 })
+                .toBuffer();
+              resolve(compact.toString("base64"));
+            } catch {
+              resolve(buf.toString("base64"));
+            }
+          } catch {
+            resolve(null);
+          }
+        });
+      } catch {
+        resolve(null);
+      }
+    });
+  } catch {
+    return null;
+  }
+}
+
 type LiteSchedule = {
   Id: number;
   BotIds: number[];
@@ -236,6 +290,8 @@ export async function tickSchedules(
             const kind = inferKindFromPath(rel);
             if (kind === "video") {
               chosenVideo = fs.readFileSync(abs);
+              const thumb = await extractVideoThumbnailBase64(abs);
+              if (thumb) thumbBase64 = thumb;
             } else {
               const raw = fs.readFileSync(abs);
               // Light processing: resize to safe width and JPEG for WA

@@ -551,7 +551,22 @@ export class WaManager {
     } else {
       auth = {
         creds: initAuthCreds(),
-        keys: { get: async () => ({}), set: async () => {} },
+        // Persist keys for first-time sessions too (supports LID/device keys)
+        keys: {
+          get: async (category, ids) => getAuthKeys(bot.Id, category, ids),
+          set: async (data) => {
+            for (const cat in data) {
+              for (const id in data[cat]) {
+                const value = data[cat][id];
+                if (value) {
+                  await upsertAuthKey(bot.Id, cat, id, value);
+                } else {
+                  await deleteAuthKey(bot.Id, cat, id);
+                }
+              }
+            }
+          },
+        },
       };
     }
 
@@ -738,7 +753,17 @@ export class WaManager {
       auth.creds = { ...auth.creds, ...partialCreds } as AuthenticationCreds;
       await updateAuthState(bot.Id, JSON.stringify(auth, BufferJSON.replacer));
 
-      const userNumber = sock.user?.id?.match(/^\d+/)?.[0];
+      // Prefer explicit phoneNumber; fallback to id digits; if LID, map to PN
+      let userNumber =
+        sock.user?.phoneNumber || sock.user?.id?.match(/^\d+/)?.[0];
+      if (!userNumber && sock.user?.id && sock.user.id.endsWith("@lid")) {
+        try {
+          const pn = await (
+            sock as any
+          )?.signalRepository?.lidMapping?.getPNForLID?.(sock.user.id);
+          if (pn) userNumber = pn;
+        } catch {}
+      }
       if (userNumber && bot.WaNumber !== userNumber) {
         bot.WaNumber = userNumber;
         updateBot(bot);
@@ -754,15 +779,48 @@ export class WaManager {
       }
 
       for (const msg of messages) {
+        // sender: JID we will reply to (keep original addressing)
         let sender = "";
+        const isGroup = !!msg.key?.remoteJid?.endsWith("g.us");
         if (msg.key?.remoteJid?.endsWith("s.whatsapp.net")) {
           sender = msg.key.remoteJid;
-        } else if (
-          msg.key?.remoteJid?.endsWith("g.us") &&
-          msg.key.participant?.endsWith("s.whatsapp.net")
-        ) {
+        } else if (isGroup && msg.key?.participant) {
           sender = msg.key.participant;
         }
+
+        // Derive sender's PN digits for auth check using alt fields or LID mapping
+        const extractDigits = (jid?: string | null) => {
+          if (!jid) return null;
+          const m = jid.match(/^(\d+)(?=@s\.whatsapp\.net)/);
+          return m ? m[1] : null;
+        };
+        let senderDigits: string | null = null;
+        try {
+          const keyAny = (msg.key as any) || {};
+          if (!isGroup) {
+            senderDigits =
+              extractDigits(keyAny.remoteJidAlt) ||
+              extractDigits(msg.key?.remoteJid || undefined);
+            if (!senderDigits && msg.key?.remoteJid?.endsWith("@lid")) {
+              const pn = await (
+                sock as any
+              )?.signalRepository?.lidMapping?.getPNForLID?.(msg.key.remoteJid);
+              if (pn) senderDigits = pn;
+            }
+          } else {
+            senderDigits =
+              extractDigits(keyAny.participantAlt) ||
+              extractDigits(msg.key?.participant || undefined);
+            if (!senderDigits && msg.key?.participant?.endsWith("@lid")) {
+              const pn = await (
+                sock as any
+              )?.signalRepository?.lidMapping?.getPNForLID?.(
+                msg.key.participant
+              );
+              if (pn) senderDigits = pn;
+            }
+          }
+        } catch {}
 
         setTimeout(
           () => {
@@ -778,13 +836,13 @@ export class WaManager {
           Math.floor(Math.random() * 1000) + 1000
         );
 
-        if (
-          msg.key.fromMe ||
-          !sender ||
-          !botInstance.authorizedNumbers.some((authorizedNumber) =>
-            sender.includes(authorizedNumber.WaNumber)
-          )
-        ) {
+        const isAuthorized =
+          !!senderDigits &&
+          botInstance.authorizedNumbers.some((authorizedNumber) =>
+            senderDigits!.includes(authorizedNumber.WaNumber)
+          );
+
+        if (msg.key.fromMe || !sender || !isAuthorized) {
           continue;
         }
 
@@ -911,7 +969,6 @@ export class WaManager {
         if (botInstance) {
           this.enqueueMessage(bot.Id, messageObj);
         }
-
         this.mainWindow.webContents.send("bot:messageQueueUpdate", {
           botId: bot.Id,
           messageQueue: botInstance?.messageQueue || [],
@@ -971,19 +1028,39 @@ export class WaManager {
       const { id: groupJid, action, participants } = groupParticipantsUpdate;
       const botWaNumber = instance.bot.WaNumber;
 
-      if (
-        action === "remove" &&
-        botWaNumber &&
-        participants.some((p) => p.includes(botWaNumber))
-      ) {
-        if (instance.groupMetadataCache?.[groupJid]) {
-          delete instance.groupMetadataCache[groupJid];
+      if (action === "remove" && botWaNumber) {
+        // Check removed participants against this bot's number, mapping LIDs if needed
+        let removedSelf = false;
+        for (const jid of participants) {
+          if (!jid) continue;
+          if (jid.includes("@s.whatsapp.net")) {
+            const digits = jid.match(/^(\d+)(?=@s\.whatsapp\.net)/)?.[1];
+            if (digits && digits === botWaNumber) {
+              removedSelf = true;
+              break;
+            }
+          } else if (jid.endsWith("@lid")) {
+            try {
+              const pn = await (
+                sock as any
+              )?.signalRepository?.lidMapping?.getPNForLID?.(jid);
+              if (pn && pn === botWaNumber) {
+                removedSelf = true;
+                break;
+              }
+            } catch {}
+          }
         }
-        const groupId = await getGroupIdByJid(groupJid);
-        if (groupId) {
-          await this.handleBotLeftGroup(bot.Id, groupId);
+        if (removedSelf) {
+          if (instance.groupMetadataCache?.[groupJid]) {
+            delete instance.groupMetadataCache[groupJid];
+          }
+          const groupId = await getGroupIdByJid(groupJid);
+          if (groupId) {
+            await this.handleBotLeftGroup(bot.Id, groupId);
+          }
+          return;
         }
-        return;
       }
 
       if (!instance.groupMetadataCache?.[groupJid]) return;
@@ -1425,11 +1502,6 @@ export class WaManager {
         instance.messageQueue.length;
       this.mainWindow.webContents.send("bot:statusUpdate", instance.bot);
     }
-
-    this.mainWindow.webContents.send("bot:messageQueueUpdate", {
-      botId,
-      messageQueue: instance.messageQueue,
-    });
   }
 
   moveMessageToTop(botId: number, idx: number) {
@@ -1650,6 +1722,7 @@ async function sendMessageToGroup(
         video: message.Video,
         caption: contentToSend,
         mimetype: "video/mp4",
+        jpegThumbnail: message.ImageThumbnailBase64 || undefined,
       });
     } else if (message.Image) {
       return sendEphemeral({
@@ -1677,6 +1750,7 @@ async function sendMessageToGroup(
         video: message.Video,
         caption: contentToSend,
         mimetype: "video/mp4",
+        jpegThumbnail: message.ImageThumbnailBase64 || undefined,
       });
     } else if (message.Image) {
       return instance.socket?.sendMessage(groupJid, {
@@ -1713,13 +1787,11 @@ async function sendMessageToGroupWithTimeout(
       timeoutMs
     )
   );
-
   return Promise.race([
     sendMessageToGroup(instance, message, groupJid),
     timeoutPromise,
   ]);
 }
-
 export async function getInviteLinks(
   sock: ReturnType<typeof makeWASocket>,
   waNumber: string | null,

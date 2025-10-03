@@ -1473,7 +1473,7 @@ export async function getDatabaseBackup(): Promise<{
   };
 }
 
-/** AUTH STATE em JSON bruto **/
+/** AUTH STATE in raw JSON **/
 export async function getAuthState(botId: number): Promise<string | null> {
   const row = await get<{ auth: string }>(
     `SELECT auth FROM bots WHERE id = ?`,
@@ -1499,6 +1499,10 @@ export async function getAuthKeys(
   category: string,
   ids: string[]
 ): Promise<Record<string, any>> {
+  // if nothing requested, return empty fast to avoid SQL 'IN ()'
+  if (!ids || ids.length === 0) {
+    return {};
+  }
   const placeholders = ids.map(() => "?").join(",");
   const rows = await all<{ key_id: string; value_json: string }>(
     `SELECT key_id, value_json FROM bot_keys
