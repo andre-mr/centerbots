@@ -23,7 +23,7 @@
     "@electron-toolkit/preload": "3.0.1",
     "@electron-toolkit/utils": "4.0.0",
     "adm-zip": "0.5.16",
-    "baileys": "7.0.0-rc.5",
+    "baileys": "7.0.0-rc.6",
     "electron-updater": "6.3.9",
     "ffmpeg-static": "5.2.0",
     "fluent-ffmpeg": "2.1.3",

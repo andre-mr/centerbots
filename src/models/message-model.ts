@@ -1,4 +1,4 @@
-import { proto } from "baileys";
+import { WAMessage } from "baileys";
 
 export class Message {
   constructor(
@@ -12,6 +12,6 @@ export class Message {
     public Schedule: string | null, // stored in DB as TEXT
 
     public ImageThumbnailBase64: string | null, // in-memory, not stored in DB
-    public WaMessage: proto.IWebMessageInfo | null // in-memory, not stored in DB
+    public WaMessage: WAMessage | null // in-memory, not stored in DB
   ) {}
 }

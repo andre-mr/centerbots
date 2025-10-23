@@ -49,6 +49,8 @@ const exposedApi = {
   // media
   getMediaDataUrl: (relPath: string) =>
     ipcRenderer.invoke("media:getDataUrl", relPath),
+  copyImageToClipboard: (dataUrl: string) =>
+    ipcRenderer.invoke("media:copyDataUrlToClipboard", dataUrl),
 
   onStatusUpdate: (callback: (bot: Bot) => void) => {
     const handler = (_event: any, bot: Bot) => callback(bot);

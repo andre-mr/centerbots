@@ -63,6 +63,18 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
   const [currentMediaPreview, setCurrentMediaPreview] = useState<string | null>(
     null
   );
+  const [copyFeedback, setCopyFeedback] = useState<"idle" | "copied" | "error">(
+    "idle"
+  );
+  const copyFeedbackTimeout = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyFeedbackTimeout.current) {
+        window.clearTimeout(copyFeedbackTimeout.current);
+      }
+    };
+  }, []);
 
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -221,6 +233,78 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
           ? prev.Monthly || { Dates: [1], Hour: 8, Minute: 0 }
           : null,
     }));
+  };
+
+  const COPY_IMAGE_ERROR_MESSAGE =
+    "Falha ao copiar imagem para a area de transferencia.";
+
+  const scheduleCopyFeedbackReset = () => {
+    if (copyFeedbackTimeout.current) {
+      window.clearTimeout(copyFeedbackTimeout.current);
+    }
+    copyFeedbackTimeout.current = window.setTimeout(() => {
+      setCopyFeedback("idle");
+      copyFeedbackTimeout.current = null;
+    }, 2000);
+  };
+
+  const handleCopyCurrentMedia = async () => {
+    if (!currentMediaPreview) return;
+
+    const clearCopyError = () => {
+      setError((prev) => (prev === COPY_IMAGE_ERROR_MESSAGE ? null : prev));
+      setCopyFeedback("idle");
+    };
+
+    try {
+      const copied = await window.appApi.copyImageToClipboard(
+        currentMediaPreview
+      );
+      if (copied) {
+        clearCopyError();
+        setCopyFeedback("copied");
+        scheduleCopyFeedbackReset();
+        return;
+      }
+    } catch (err) {
+      console.warn("Native clipboard copy failed, fallback to browser API", err);
+    }
+
+    try {
+      const clipboard = navigator.clipboard;
+      if (!clipboard) throw new Error("Clipboard API not available");
+
+      const clipboardItemCtor =
+        (window as any).ClipboardItem ||
+        (typeof ClipboardItem !== "undefined" ? ClipboardItem : null);
+
+      if (clipboard.write && clipboardItemCtor) {
+        const response = await fetch(currentMediaPreview);
+        const blob = await response.blob();
+        const mimeType = blob.type || "image/png";
+        const item = new clipboardItemCtor({ [mimeType]: blob });
+        await clipboard.write([item]);
+        clearCopyError();
+        setCopyFeedback("copied");
+        scheduleCopyFeedbackReset();
+        return;
+      }
+
+      if (clipboard.writeText) {
+        await clipboard.writeText(currentMediaPreview);
+        clearCopyError();
+        setCopyFeedback("copied");
+        scheduleCopyFeedbackReset();
+        return;
+      }
+
+      throw new Error("No supported clipboard method found");
+    } catch (err) {
+      console.error("Failed to copy image to clipboard", err);
+      setError(COPY_IMAGE_ERROR_MESSAGE);
+      setCopyFeedback("error");
+      scheduleCopyFeedbackReset();
+    }
   };
 
   const toggleWeeklyDay = (dayIndex: number) => {
@@ -1030,11 +1114,29 @@ const ScheduleDetailsPage: React.FC<Props> = ({ schedule, isNew, onBack }) => {
                       preload="metadata"
                     />
                   ) : (
-                    <img
-                      src={currentMediaPreview}
-                      alt="preview"
-                      className="h-full w-full rounded bg-white object-contain"
-                    />
+                    <div className="relative h-full w-full">
+                      <img
+                        src={currentMediaPreview}
+                        alt="preview"
+                        className="h-full w-full rounded bg-white object-contain"
+                      ></img>
+                      <button
+                        className={`absolute bottom-2 right-2 rounded px-2 py-1 transition-colors ${
+                          copyFeedback === "copied"
+                            ? "bg-emerald-500 text-white"
+                            : copyFeedback === "error"
+                              ? "bg-red-500 text-white"
+                              : "bg-gray-200 text-gray-800"
+                        }`}
+                        onClick={handleCopyCurrentMedia}
+                      >
+                        {copyFeedback === "copied"
+                          ? "Copiado!"
+                          : copyFeedback === "error"
+                            ? "Tente novamente"
+                            : "Copiar"}
+                      </button>
+                    </div>
                   )
                 ) : (
                   <div className="relative flex h-full w-full flex-col items-center justify-center">

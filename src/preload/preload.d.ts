@@ -111,6 +111,7 @@ interface ExposedApi {
 
   // media
   getMediaDataUrl: (relPath: string) => Promise<string | null>;
+  copyImageToClipboard: (dataUrl: string) => Promise<boolean>;
 
   onLicenseInvalid: (callback: () => void) => () => void;
   onLicenseGrace: (callback: () => void) => () => void;

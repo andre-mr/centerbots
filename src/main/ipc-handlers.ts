@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { app, clipboard, dialog, ipcMain, nativeImage } from "electron";
 import {
   getAllBots,
   getGroupsByBotId,
@@ -32,7 +32,6 @@ import fs from "fs";
 import { Bot } from "../models/bot-model";
 import { getWaManager } from "./wa-manager";
 import path from "path";
-import { app, dialog } from "electron";
 import AdmZip from "adm-zip";
 import { closeDatabase } from "./db-connection";
 
@@ -300,6 +299,21 @@ export function setupIpcHandlers() {
       return null;
     }
   });
+
+  ipcMain.handle(
+    "media:copyDataUrlToClipboard",
+    async (_event, dataUrl: string) => {
+      try {
+        if (typeof dataUrl !== "string" || dataUrl.trim() === "") return false;
+        const image = nativeImage.createFromDataURL(dataUrl);
+        if (image.isEmpty()) return false;
+        clipboard.writeImage(image);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  );
 
   ipcMain.handle(
     "schedules:create",

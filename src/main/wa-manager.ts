@@ -6,6 +6,7 @@ import {
   AuthenticationCreds,
   downloadMediaMessage,
   GroupMetadata,
+  GroupParticipant,
 } from "baileys";
 import { initAuthCreds } from "baileys/lib/Utils/auth-utils.js";
 // import { Browsers, BufferJSON } from "baileys/lib/Utils/generics.js";
@@ -101,7 +102,7 @@ export class WaManager {
   public appSettings: AppSettings | null = null;
   private pendingParticipantUpdates: {
     botId: number;
-    update: { id: string; action: string; participants: string[] };
+    update: { id: string; action: string; participants: GroupParticipant[] };
   }[] = [];
 
   constructor(mainWindow: Electron.BrowserWindow) {
@@ -418,7 +419,7 @@ export class WaManager {
 
   async handleGroupParticipantsUpdate(
     botId: number,
-    update: { id: string; action: string; participants: string[] }
+    update: { id: string; action: string; participants: GroupParticipant[] }
   ) {
     if (this.syncLock) {
       this.pendingParticipantUpdates.push({ botId, update });
@@ -435,17 +436,17 @@ export class WaManager {
 
       let shouldUpdateGroup = false;
 
-      for (const pJid of update.participants) {
+      for (const participant of update.participants) {
         if (update.action === "add") {
-          const memberId = await getOrCreateMemberId(pJid);
+          const memberId = await getOrCreateMemberId(participant.id);
           await createGroupMember(groupId, memberId, false);
           shouldUpdateGroup = true;
         } else if (update.action === "remove") {
-          const memberId = await getOrCreateMemberId(pJid);
+          const memberId = await getOrCreateMemberId(participant.id);
           await deleteGroupMember(groupId, memberId);
           shouldUpdateGroup = true;
         } else if (update.action === "promote" || update.action === "demote") {
-          const memberId = await getOrCreateMemberId(pJid);
+          const memberId = await getOrCreateMemberId(participant.id);
           await updateGroupMemberAdmin(
             groupId,
             memberId,
@@ -1031,19 +1032,26 @@ export class WaManager {
       if (action === "remove" && botWaNumber) {
         // Check removed participants against this bot's number, mapping LIDs if needed
         let removedSelf = false;
-        for (const jid of participants) {
-          if (!jid) continue;
-          if (jid.includes("@s.whatsapp.net")) {
-            const digits = jid.match(/^(\d+)(?=@s\.whatsapp\.net)/)?.[1];
+        for (const participant of participants) {
+          if (!participant) continue;
+          if (
+            participant.phoneNumber ||
+            participant.id.includes("@s.whatsapp.net")
+          ) {
+            let digits =
+              participant.phoneNumber ||
+              participant.id.match(/^(\d+)(?=@s\.whatsapp\.net)/)?.[1];
             if (digits && digits === botWaNumber) {
               removedSelf = true;
               break;
             }
-          } else if (jid.endsWith("@lid")) {
+          } else if (participant.lid || participant.id.endsWith("@lid")) {
             try {
-              const pn = await (
-                sock as any
-              )?.signalRepository?.lidMapping?.getPNForLID?.(jid);
+              const pn =
+                participant.phoneNumber ||
+                (await (
+                  sock as any
+                )?.signalRepository?.lidMapping?.getPNForLID?.(participant));
               if (pn && pn === botWaNumber) {
                 removedSelf = true;
                 break;
@@ -1071,35 +1079,38 @@ export class WaManager {
       if (["add", "remove", "promote", "demote"].includes(action)) {
         if (group.participants && Array.isArray(group.participants)) {
           if (action === "add") {
-            for (const jid of participants) {
-              if (!group.participants.some((p: any) => p.id === jid)) {
-                group.participants.push({ id: jid, admin: null });
+            for (const participant of participants) {
+              if (
+                !group.participants.some((p: any) => p.id === participant.id)
+              ) {
+                group.participants.push({ id: participant.id, admin: null });
                 cacheUpdated = true;
               }
             }
           } else if (action === "remove") {
             const before = group.participants.length;
             group.participants = group.participants.filter(
-              (p: any) => !participants.includes(p.id)
+              (p: any) =>
+                !participants.some((participantId) => participantId === p.id)
             );
             if (group.participants.length !== before) cacheUpdated = true;
           } else if (action === "promote") {
-            for (const jid of participants) {
-              const participant = group.participants.find(
-                (p: any) => p.id === jid
+            for (const participant of participants) {
+              const currentParticipant = group.participants.find(
+                (p: any) => p.id === participant.id
               );
-              if (participant && participant.admin !== "admin") {
-                participant.admin = "admin";
+              if (currentParticipant && currentParticipant.admin !== "admin") {
+                currentParticipant.admin = "admin";
                 cacheUpdated = true;
               }
             }
           } else if (action === "demote") {
-            for (const jid of participants) {
-              const participant = group.participants.find(
-                (p: any) => p.id === jid
+            for (const participant of participants) {
+              const currentParticipant = group.participants.find(
+                (p: any) => p.id === participant.id
               );
-              if (participant && participant.admin !== null) {
-                participant.admin = null;
+              if (currentParticipant && currentParticipant.admin !== null) {
+                currentParticipant.admin = null;
                 cacheUpdated = true;
               }
             }
@@ -1815,7 +1826,8 @@ export async function getInviteLinks(
         waNumber &&
         serverGroup?.participants?.some(
           (p) =>
-            p.id.includes(waNumber) &&
+            ((p.phoneNumber && p.phoneNumber === waNumber) ||
+              p.id.includes(waNumber)) &&
             (p.admin === "admin" ||
               p.admin === "superadmin" ||
               p.isAdmin ||
