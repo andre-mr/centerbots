@@ -86,8 +86,9 @@ const exposedApi = {
     return () => ipcRenderer.removeListener("bot:messageQueueUpdate", handler);
   },
 
-  updateBotState: (botId: number, patch: Partial<Bot>) =>
-    ipcRenderer.invoke("bots:updateBotState", botId, patch),
+  updateBotState: (botId: number, patch: Partial<Bot>) => {
+    ipcRenderer.invoke("bots:updateBotState", botId, patch);
+  },
 
   updateBotGroupsBroadcast: (botId: number, groups: any[]) =>
     ipcRenderer.invoke("bots:updateBotGroupsBroadcast", botId, groups),

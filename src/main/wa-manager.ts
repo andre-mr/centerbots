@@ -7,6 +7,7 @@ import {
   downloadMediaMessage,
   GroupMetadata,
   GroupParticipant,
+  WAVersion,
 } from "baileys";
 import { initAuthCreds } from "baileys/lib/Utils/auth-utils.js";
 // import { Browsers, BufferJSON } from "baileys/lib/Utils/generics.js";
@@ -63,6 +64,126 @@ import { logger } from "./logger";
 /* -------------------------------------------------------------------------- */
 /*                                   Types                                    */
 /* -------------------------------------------------------------------------- */
+
+/* -------------------------------------------------------------------------- */
+/*                         WhatsApp Version Scrapper                          */
+/* -------------------------------------------------------------------------- */
+
+export async function scrapWhatsAppVersion(
+  options?: RequestInit
+): Promise<{ version: WAVersion; isLatest: boolean }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const res = await fetch("https://wppconnect.io/whatsapp-versions/", {
+      ...options,
+      signal: options?.signal ?? controller.signal,
+      redirect: "follow",
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const html = await res.text();
+
+    // Try href first: https://web.whatsapp.com/?v=2.3000.1029096348-...
+    let m = html.match(/web\.whatsapp\.com\/?\?v=(\d+\.\d+\.\d+)/i);
+    if (!m) {
+      // Fallback to visible text content like: >2.3000.1029096348-alpha<
+      m = html.match(/>(\d+\.\d+\.\d+)(?:-[^<]*)?</i);
+    }
+    if (!m) throw new Error("Version not found");
+
+    const [major, minor, patch] = m[1].split(".").map((n) => Number(n));
+    if ([major, minor, patch].some((n) => Number.isNaN(n))) {
+      throw new Error("Invalid version parsed");
+    }
+
+    const version: WAVersion = [major, minor, patch];
+    return { version, isLatest: true };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/* Short, dedicated race between scrap and Baileys */
+async function fetchWhatsAppVersionRace(
+  timeoutMs = 10_000
+): Promise<WAVersion> {
+  const scrapController = new AbortController();
+  const baileysController = new AbortController();
+
+  const withTimeout = <T>(
+    p: Promise<T>,
+    ms: number,
+    label: string,
+    controller?: AbortController
+  ): Promise<T> =>
+    new Promise<T>((resolve, reject) => {
+      const t = setTimeout(() => {
+        try {
+          controller?.abort();
+        } catch {}
+        reject(new Error(`${label} timeout`));
+      }, ms);
+      p.then((v) => {
+        clearTimeout(t);
+        resolve(v);
+      }).catch((e) => {
+        clearTimeout(t);
+        reject(e);
+      });
+    });
+
+  const settle = async <T>(p: Promise<T>) => {
+    try {
+      return { ok: true as const, value: await p };
+    } catch (error) {
+      return { ok: false as const, error };
+    }
+  };
+
+  const scrapP = settle(
+    withTimeout(
+      scrapWhatsAppVersion({ signal: scrapController.signal }),
+      timeoutMs,
+      "scrapWhatsAppVersion",
+      scrapController
+    )
+  );
+  const baileysP = settle(
+    withTimeout(
+      fetchLatestBaileysVersion({ signal: baileysController.signal }),
+      timeoutMs,
+      "fetchLatestBaileysVersion",
+      baileysController
+    )
+  );
+
+  try {
+    const first = await Promise.race([
+      scrapP.then((r) => ({ src: "scrap" as const, r })),
+      baileysP.then((r) => ({ src: "baileys" as const, r })),
+    ]);
+
+    if (first.r.ok) {
+      if (first.src === "scrap") baileysController.abort();
+      else scrapController.abort();
+      return first.r.value.version;
+    }
+
+    const other = await (first.src === "scrap" ? baileysP : scrapP);
+    if (other.ok) {
+      return other.value.version;
+    }
+
+    throw new Error("Both version fetchers failed or timed out");
+  } finally {
+    try {
+      scrapController.abort();
+    } catch {}
+    try {
+      baileysController.abort();
+    } catch {}
+  }
+}
 
 type BotInstance = {
   bot: Bot;
@@ -517,7 +638,7 @@ export class WaManager {
     botInstance.isConnecting = true;
     botInstance.manualDisconnect = false;
 
-    const { version } = await fetchLatestBaileysVersion();
+    const version = await fetchWhatsAppVersionRace(30_000);
 
     /* ------------------------------ proxy agent ----------------------------- */
     let proxyAgent: HttpsProxyAgent<string> | null = null;
