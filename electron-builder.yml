@@ -30,13 +30,15 @@ mac:
   target:
     - target: dmg
       arch:
+        - x64
         - arm64
     - target: zip
       arch:
-        - arm64
         - x64
+        - arm64
+  artifactName: ${productName}-${version}-${arch}-mac.${ext}
 dmg:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${name}-${version}-${arch}.${ext}
 linux:
   icon: resources/icon.png
   target:
