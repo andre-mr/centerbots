@@ -27,6 +27,14 @@ mac:
   hardenedRuntime: false
   gatekeeperAssess: false
   notarize: false
+  target:
+    - target: dmg
+      arch:
+        - arm64
+    - target: zip
+      arch:
+        - arm64
+        - x64
 dmg:
   artifactName: ${name}-${version}.${ext}
 linux:
@@ -37,7 +45,6 @@ linux:
   category: Utility
 appImage:
   artifactName: ${name}-${version}.${ext}
-npmRebuild: false
 publish:
   provider: generic
   url: https://centerbots.centerpromos.com/releases
