@@ -18,7 +18,7 @@ jobs:
             platform: "win"
           - os: macos-latest
             platform: "mac:arm64"
-          - os: macos-12
+          - os: macos-15-intel
             platform: "mac:x64"
     runs-on: ${{ matrix.os }}
 
