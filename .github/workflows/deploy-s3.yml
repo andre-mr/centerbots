@@ -13,11 +13,13 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            platform: linux
+            platform: "linux"
           - os: windows-latest
-            platform: win
+            platform: "win"
           - os: macos-latest
-            platform: mac
+            platform: "mac:arm64"
+          - os: macos-12
+            platform: "mac:x64"
     runs-on: ${{ matrix.os }}
 
     steps:
