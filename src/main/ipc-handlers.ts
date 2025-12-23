@@ -91,13 +91,6 @@ export function setupIpcHandlers() {
   });
 
   ipcMain.handle("bots:delete", async (_event, botId: number) => {
-    const bot = await getBotById(botId);
-    if (bot && bot.WaNumber) {
-      const authDir = path.join(app.getPath("userData"), "auth", bot.WaNumber);
-      if (fs.existsSync(authDir)) {
-        fs.rmSync(authDir, { recursive: true, force: true });
-      }
-    }
     await deleteBot(botId);
     return getAllBots();
   });

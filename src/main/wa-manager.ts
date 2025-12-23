@@ -697,7 +697,7 @@ export class WaManager {
       version,
       auth,
       printQRInTerminal: false,
-      logger: pino({ level: "error" }),
+      logger: pino({ level: "silent" }),
       cachedGroupMetadata: async (jid) => botInstance.groupMetadataCache?.[jid],
       generateHighQualityLinkPreview: false,
       agent: (proxyAgent as any) || undefined,
@@ -903,10 +903,14 @@ export class WaManager {
       for (const msg of messages) {
         // sender: JID we will reply to (keep original addressing)
         let sender = "";
-        const isGroup = !!msg.key?.remoteJid?.endsWith("g.us");
-        if (msg.key?.remoteJid?.endsWith("s.whatsapp.net")) {
-          sender = msg.key.remoteJid;
-        } else if (isGroup && msg.key?.participant) {
+        const keyAny = (msg.key as any) || {};
+        const remoteJidAlt = keyAny.remoteJidAlt as string | undefined;
+        const isGroup =
+          !!msg.key?.remoteJid?.endsWith("g.us") ||
+          !!remoteJidAlt?.endsWith("g.us");
+        if (!isGroup) {
+          sender = msg.key?.remoteJid || "";
+        } else if (msg.key?.participant) {
           sender = msg.key.participant;
         }
 
@@ -918,10 +922,9 @@ export class WaManager {
         };
         let senderDigits: string | null = null;
         try {
-          const keyAny = (msg.key as any) || {};
           if (!isGroup) {
             senderDigits =
-              extractDigits(keyAny.remoteJidAlt) ||
+              extractDigits(remoteJidAlt) ||
               extractDigits(msg.key?.remoteJid || undefined);
             if (!senderDigits && msg.key?.remoteJid?.endsWith("@lid")) {
               const pn = await (
@@ -981,7 +984,7 @@ export class WaManager {
         if (
           typeof content === "string" &&
           content.trim().toLowerCase() === "status" &&
-          msg.key?.remoteJid?.endsWith("s.whatsapp.net")
+          !isGroup
         ) {
           const statusTranslated =
             bot.Status === Status.Online
@@ -1026,10 +1029,8 @@ export class WaManager {
           bot.WhatsAppSources === WhatsAppSources.None ||
           !content ||
           (bot.LinkRequired && !/https?:\/\/[^\s]+/i.test(content)) ||
-          (msg.key?.remoteJid?.endsWith("s.whatsapp.net") &&
-            bot.WhatsAppSources === WhatsAppSources.Group) ||
-          (msg.key?.remoteJid?.endsWith("g.us") &&
-            bot.WhatsAppSources === WhatsAppSources.Direct)
+          (!isGroup && bot.WhatsAppSources === WhatsAppSources.Group) ||
+          (isGroup && bot.WhatsAppSources === WhatsAppSources.Direct)
         ) {
           continue;
         }
